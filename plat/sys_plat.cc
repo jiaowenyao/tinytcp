@@ -505,7 +505,7 @@ void sys_plat_init(void) {
 
 #endif
 
-#if defined(NET_DRIVER_PCAP)
+// #if defined(NET_DRIVER_PCAP)
 #include <pcap.h>
 
 /**
@@ -699,5 +699,5 @@ pcap_t * pcap_device_open(const char* ip, const uint8_t* mac_addr) {
     return pcap;
 }
 
-#endif
+// #endif
 

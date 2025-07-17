@@ -6,7 +6,7 @@ include(${CMAKE_SOURCE_DIR}/cmake/utils.cmake)
 
 
 set(LIBS
-    pcap
+    tinytcp
 )
 
 my_add_excutable(test_send_package test_send_package.cc tinytcp "${LIBS}")

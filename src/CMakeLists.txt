@@ -5,9 +5,10 @@ include_directories(
 )
 
 set(LIB_SRC
-    tcp.cc
+    ${CMAKE_SOURCE_DIR}/plat/sys_plat.cc
+    # tcp.cc
 )
 
 add_library(tinytcp SHARED ${LIB_SRC})
-# target_link_libraries(tinytcp )
+target_link_libraries(tinytcp pcap pthread)
 
