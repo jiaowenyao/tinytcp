@@ -12,6 +12,10 @@ set(LIB_SRC
     mutex.cc
     thread.cc
     util.cc
+    net/protocol_stack.cc
+    net/net.cc
+    net/memblock.cc
+    net/network.cc
 )
 
 add_library(tinytcp SHARED ${LIB_SRC})

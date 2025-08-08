@@ -1,8 +1,4 @@
-
-
-#include <atomic>
 #include <memory>
-#include <stdexcept>
 #include <thread>
 #include <gtest/gtest.h>
 
@@ -39,11 +35,11 @@ TEST_F(LockFreeRingQueueTest, SingleEnqueueDequeue) {
     int value_in = 42;
     int value_out = 0;
 
-    EXPECT_TRUE(m_queue->enqueue(value_in));
+    EXPECT_TRUE(m_queue->push(value_in));
     EXPECT_EQ(m_queue->size(), 1U);
     EXPECT_FALSE(m_queue->is_empty());
 
-    EXPECT_TRUE(m_queue->dequeue(&value_out));
+    EXPECT_TRUE(m_queue->pop(&value_out));
     EXPECT_EQ(value_out, value_in);
     EXPECT_EQ(m_queue->size(), 0U);
     EXPECT_TRUE(m_queue->is_empty());
@@ -52,17 +48,17 @@ TEST_F(LockFreeRingQueueTest, SingleEnqueueDequeue) {
 // 测试队列满时入队
 TEST_F(LockFreeRingQueueTest, EnqueueFullQueue) {
     for (uint32_t i = 0; i < m_queue_size - 1; ++i) {  // 注意减1
-        EXPECT_TRUE(m_queue->enqueue(static_cast<int>(i)));
+        EXPECT_TRUE(m_queue->push(static_cast<int>(i)));
     }
 
     EXPECT_EQ(m_queue->size(), m_queue_size - 1);
-    EXPECT_FALSE(m_queue->enqueue(100));  // 队列已满，入队失败
+    EXPECT_FALSE(m_queue->push(100));  // 队列已满，入队失败
 }
 
 // 测试空队列出队
 TEST_F(LockFreeRingQueueTest, DequeueEmptyQueue) {
     int value_out = 0;
-    EXPECT_FALSE(m_queue->dequeue(&value_out));  // 队列为空，出队失败
+    EXPECT_FALSE(m_queue->pop(&value_out));  // 队列为空，出队失败
 }
 
 // 多线程测试
@@ -72,14 +68,14 @@ TEST_F(LockFreeRingQueueTest, MultiThreadedEnqueueDequeue) {
 
     auto enqueue_function = [&](int thread_id) {
         for (int i = 0; i < num_elements_per_thread; ++i) {
-            m_queue->enqueue(thread_id * num_elements_per_thread + i);
+            m_queue->push(thread_id * num_elements_per_thread + i);
         }
     };
 
     auto dequeue_function = [&](int thread_id, int* result_array) {
         for (int i = 0; i < num_elements_per_thread; ++i) {
         int value = 0;
-        while (!m_queue->dequeue(&value)) {
+        while (!m_queue->pop(&value)) {
             std::this_thread::yield();
         }
         result_array[thread_id * num_elements_per_thread + i] = value;
@@ -125,8 +121,8 @@ TEST(LockFreeRingQueueBoundaryTest, InitializationWithSizeOne) {
     EXPECT_TRUE(small_queue.is_empty());
 
     int value_in = 99;
-    EXPECT_TRUE(small_queue.enqueue(value_in));
-    EXPECT_FALSE(small_queue.enqueue(value_in));  // 队列应该已经满了
+    EXPECT_TRUE(small_queue.push(value_in));
+    EXPECT_FALSE(small_queue.push(value_in));  // 队列应该已经满了
 }
 
 // 边界条件测试：入队和出队仅一个元素
@@ -136,17 +132,19 @@ TEST(LockFreeRingQueueBoundaryTest, SingleElementQueue) {
     int value_in = 123;
     int value_out = 0;
 
-    EXPECT_TRUE(small_queue.enqueue(value_in));
-    EXPECT_FALSE(small_queue.enqueue(value_in));  // 队列已满
+    EXPECT_TRUE(small_queue.push(value_in));
+    EXPECT_FALSE(small_queue.push(value_in));  // 队列已满
 
-    EXPECT_TRUE(small_queue.dequeue(&value_out));
+    EXPECT_TRUE(small_queue.pop(&value_out));
     EXPECT_EQ(value_out, value_in);
 
-    EXPECT_FALSE(small_queue.dequeue(&value_out));  // 队列为空
+    EXPECT_FALSE(small_queue.pop(&value_out));  // 队列为空
 }
+
 
 int main(int argc, char** argv) {
     ::testing::InitGoogleTest(&argc, argv);
     return RUN_ALL_TESTS();
 }
+
 

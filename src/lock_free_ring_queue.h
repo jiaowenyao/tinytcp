@@ -16,19 +16,24 @@ namespace tinytcp {
 template <typename T>
 class LockFreeRingQueue : Noncopyable {
 public:
+    using  ptr = std::shared_ptr<LockFreeRingQueue<T>>;
+    using uptr = std::unique_ptr<LockFreeRingQueue<T>>;
+
     explicit LockFreeRingQueue(uint32_t size);
 
     ~LockFreeRingQueue() = default;
 
-    bool enqueue(const T& data);
+    bool push(const T& data, uint32_t timeout_ms = -1);
 
-    bool dequeue(T* data);
+    bool pop(T* data, uint32_t timeout_ms = -1);
 
     bool is_empty() const noexcept;
 
     bool is_full() const noexcept;
 
     uint32_t size() const noexcept;
+
+    uint32_t capacity() const noexcept { return m_size; }
 
 private:
     static bool is_power_of_two(uint32_t num) noexcept;
@@ -64,7 +69,7 @@ LockFreeRingQueue<T>::LockFreeRingQueue(uint32_t size)
 }
 
 template <typename T>
-bool LockFreeRingQueue<T>::enqueue(const T& data) {
+bool LockFreeRingQueue<T>::push(const T& data, uint32_t timeout_ms) {
     uint32_t current_read_index;
     uint32_t current_write_index;
 
@@ -93,7 +98,7 @@ bool LockFreeRingQueue<T>::enqueue(const T& data) {
 }
 
 template <typename T>
-bool LockFreeRingQueue<T>::dequeue(T* data) {
+bool LockFreeRingQueue<T>::pop(T* data, uint32_t timeout_ms) {
     if (data == nullptr) {
         throw std::invalid_argument("Null pointer passed to Dequeue");
     }
