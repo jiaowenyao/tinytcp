@@ -22,16 +22,17 @@ MemBlock::~MemBlock() {
 
 }
 
-bool MemBlock::alloc(void* ptr, int timeout_ms) {
+bool MemBlock::alloc(void** ptr, int timeout_ms) {
     if (timeout_ms < 0) {
         timeout_ms = -1;
     }
-    uint8_t* _ptr = nullptr;
-    return m_queue->pop(&_ptr);
+    bool ok = m_queue->pop((uint8_t**)ptr);
+    return ok;
 }
 
 bool MemBlock::free(const void* ptr) {
-    return m_queue->push((uint8_t*)ptr);
+    bool ok = m_queue->push((uint8_t*)ptr);
+    return ok;
 }
 
 

@@ -30,7 +30,7 @@ public:
     * ms = 0  : try pop
     * ms > 0  : 加上超时处理
     */
-    bool alloc(void* ptr, int timeout_ms);
+    bool alloc(void** ptr, int timeout_ms);
 
     bool free(const void* ptr);
 

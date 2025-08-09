@@ -12,7 +12,7 @@ public:
     using ptr  = std::shared_ptr<INetWork>;
     using uptr = std::unique_ptr<INetWork>;
 
-    INetWork(IProtocolStack* protocal_stack);
+    explicit INetWork(IProtocolStack* protocal_stack);
     virtual ~INetWork() = default;
     virtual net_err_t init() = 0;
     virtual net_err_t start() = 0;
@@ -25,8 +25,8 @@ public:
 
 
 protected:
-    Thread::ptr m_recv_thread = nullptr;
-    Thread::ptr m_send_thread = nullptr;
+    Thread::uptr m_recv_thread = nullptr;
+    Thread::uptr m_send_thread = nullptr;
 
     IProtocolStack* m_protocal_stack = nullptr;
 
@@ -41,17 +41,16 @@ public:
     using ptr  = std::shared_ptr<PcapNetWork>;
     using uptr = std::unique_ptr<PcapNetWork>;
 
-    PcapNetWork(IProtocolStack* protocal_stack);
+    explicit PcapNetWork(IProtocolStack* protocal_stack);
     ~PcapNetWork() = default;
     net_err_t init() override;
     net_err_t start() override;
     net_err_t netif_in() override;
     net_err_t netif_out() override;
     net_err_t msg_send(exmsg_t* msg, int32_t timeout_ms) override;
-
-public:
-    static void recv_func();
-    static void send_func();
+    // 接收和发送线程函数
+    void recv_func();
+    void send_func();
 
 private:
 };

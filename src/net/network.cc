@@ -14,6 +14,8 @@ INetWork::INetWork(IProtocolStack* protocal_stack)
 PcapNetWork::PcapNetWork(IProtocolStack* protocal_stack)
     : INetWork(protocal_stack) {
 
+    m_send_thread = std::make_unique<Thread>(std::bind(&PcapNetWork::send_func, this), "network_send_thread");
+    m_recv_thread = std::make_unique<Thread>(std::bind(&PcapNetWork::recv_func, this), "network_recv_thread");
 }
 
 net_err_t PcapNetWork::init()  {
@@ -27,7 +29,11 @@ net_err_t PcapNetWork::start() {
 }
 
 void PcapNetWork::recv_func() {
-
+    TINYTCP_LOG_INFO(g_logger) << "PcapNetWork recv begin";
+    while (true) {
+        sleep(1);
+        netif_in();
+    }
 }
 
 void PcapNetWork::send_func() {
@@ -60,7 +66,7 @@ net_err_t PcapNetWork::netif_out() {
 
 net_err_t PcapNetWork::msg_send(exmsg_t* msg, int32_t timeout_ms) {
     m_protocal_stack->push_msg(msg, timeout_ms);
-    
+
     return net_err_t::NET_ERR_OK;
 }
 

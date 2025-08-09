@@ -20,9 +20,11 @@ public:
     net_err_t init()  override;
     net_err_t start() override;
 
+    void work_thread_func();
+
 private:
     INetWork::uptr m_network;
-    Thread::ptr m_work_thread;
+    Thread::uptr m_work_thread;
 };
 
 

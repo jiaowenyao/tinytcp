@@ -12,7 +12,8 @@ namespace tinytcp {
 
 class Thread : Noncopyable {
 public:
-    using ptr = std::shared_ptr<Thread>;
+    using ptr  = std::shared_ptr<Thread>;
+    using uptr = std::unique_ptr<Thread>;
 
     Thread(std::function<void()> cb, const std::string& name);
     ~Thread();
