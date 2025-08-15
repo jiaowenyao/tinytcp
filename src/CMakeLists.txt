@@ -16,6 +16,7 @@ set(LIB_SRC
     net/net.cc
     net/memblock.cc
     net/network.cc
+    net/pktbuf.cc
 )
 
 add_library(tinytcp SHARED ${LIB_SRC})

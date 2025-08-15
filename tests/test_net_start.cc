@@ -1,7 +1,67 @@
 #include <thread>
 #include "src/net/net.h"
+#include "src/net/pktbuf.h"
 #include "src/config.h"
+#include <list>
 
+template class std::list<tinytcp::PktBlock*>;
+static tinytcp::Logger::ptr g_logger = TINYTCP_LOG_ROOT();
+
+void pktbuf_test() {
+    auto pktmgr = tinytcp::PktMgr::get_instance();
+
+    TINYTCP_LOG_INFO(g_logger) << pktmgr->get_blk_list_size() << std::endl;
+    tinytcp::PktBuffer pktbuf;
+    pktbuf.alloc(2000);
+
+    // auto it = pktbuf.get_list().begin();
+    // std::cout << (*it)->get_size()
+    //     << ' ' << (uint64_t)((*it)->get_data())
+    //     << ' ' << (uint64_t)((*it)->get_payload()) << std::endl;
+    // it++;
+    // std::cout << (*it)->get_size()
+    //     << ' ' << (uint64_t)((*it)->get_data())
+    //     << ' ' << (uint64_t)((*it)->get_payload()) << std::endl;
+    //
+    pktbuf.debug_print();
+    for (int i = 0; i < 10; ++i) {
+        pktbuf.alloc_header(200, false);
+        pktbuf.debug_print();
+    }
+
+    std::cout << "===================" << std::endl;
+
+    // pktbuf.debug_print();
+    for (int i = 0; i < 10; ++i) {
+        pktbuf.remove_header(200);
+        pktbuf.debug_print();
+    }
+
+    TINYTCP_LOG_INFO(g_logger) << pktmgr->get_blk_list_size() << std::endl;
+    std::cout << "+++++++++++++++++++" << std::endl;
+
+    pktbuf.resize(200);
+    pktbuf.debug_print();
+    pktbuf.resize(2000);
+    pktbuf.debug_print();
+    pktbuf.resize(4000);
+    pktbuf.debug_print();
+    pktbuf.resize(1000);
+    pktbuf.debug_print();
+    pktbuf.resize(100);
+    pktbuf.debug_print();
+    pktbuf.resize(0);
+    pktbuf.debug_print();
+    pktbuf.resize(3000);
+    pktbuf.debug_print();
+    pktbuf.resize(7000);
+    pktbuf.debug_print();
+
+    TINYTCP_LOG_INFO(g_logger) << pktmgr->get_blk_list_size() << std::endl;
+    pktbuf.resize(0);
+    TINYTCP_LOG_INFO(g_logger) << pktmgr->get_blk_list_size() << std::endl;
+
+}
 
 int main() {
 
@@ -14,6 +74,8 @@ int main() {
     p.init();
 
     p.start();
+
+    pktbuf_test();
 
     while (1) {
         std::this_thread::yield();
