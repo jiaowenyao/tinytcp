@@ -63,6 +63,38 @@ void pktbuf_test() {
 
 }
 
+void pktbuf_header_test() {
+    auto pktmgr = tinytcp::PktMgr::get_instance();
+    auto pktbuf_1 = pktmgr->get_pktbuffer();
+    auto pktbuf_2 = pktmgr->get_pktbuffer();
+
+    pktbuf_1->alloc(3000);
+    pktbuf_1->debug_print();
+    pktbuf_2->alloc(5000);
+    pktbuf_2->debug_print();
+    pktbuf_1->merge_buf(pktbuf_2);
+    pktbuf_1->debug_print();
+
+    std::cout << "-----" << std::endl;
+    pktbuf_1->set_cont_header(800);
+    pktbuf_1->debug_print();
+    pktbuf_1->set_cont_header(1000);
+    pktbuf_1->debug_print();
+
+    std::cout << "-----" << std::endl;
+    pktbuf_1->resize(100);
+    pktbuf_1->alloc(120);
+    pktbuf_1->alloc(450);
+    pktbuf_1->alloc(200);
+    pktbuf_1->alloc(300);
+    pktbuf_1->debug_print();
+    pktbuf_1->set_cont_header(1000);
+    pktbuf_1->debug_print();
+
+
+    std::cout << pktmgr->get_buf_list_size() << ' ' << pktmgr->get_blk_list_size() << std::endl;
+}
+
 int main() {
 
     YAML::Node root = YAML::LoadFile("/home/jwy/workspace/tinytcp/config/log.yaml");
@@ -75,7 +107,8 @@ int main() {
 
     p.start();
 
-    pktbuf_test();
+    // pktbuf_test();
+    pktbuf_header_test();
 
     while (1) {
         std::this_thread::yield();

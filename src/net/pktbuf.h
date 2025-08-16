@@ -39,6 +39,8 @@ class PktBuffer {
 public:
     PktBuffer();
     ~PktBuffer();
+    void init();
+    void reset();
 
     // 分配多少字节的空间
     bool alloc(uint32_t size, bool alloc_front = true, bool insert_front = false);
@@ -50,6 +52,9 @@ public:
     net_err_t alloc_header(uint32_t size, bool is_cont = true);
     net_err_t remove_header(uint32_t size);
     net_err_t resize(uint32_t size);
+    net_err_t merge_buf(PktBuffer* buf);
+    // 调整包头，调成连续的
+    net_err_t set_cont_header(uint32_t size);
 
     // 调试打印
     void debug_print();

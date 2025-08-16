@@ -43,6 +43,14 @@ PktBuffer::PktBuffer()
 
 }
 
+void PktBuffer::init() {
+    m_capacity = 0U;
+}
+
+void PktBuffer::reset() {
+    m_capacity = 0U;
+}
+
 PktBuffer::~PktBuffer() {
     // 把资源交还给管理器
     auto pktmgr = PktMgr::get_instance();
@@ -259,6 +267,53 @@ net_err_t PktBuffer::resize(uint32_t size) {
     return net_err_t::NET_ERR_OK;
 }
 
+net_err_t PktBuffer::merge_buf(PktBuffer* buf) {
+    auto pktmgr = PktMgr::get_instance();
+    m_blk_list.splice(m_blk_list.end(), buf->m_blk_list);
+    m_capacity += buf->m_capacity;
+    pktmgr->release_pktbuffer(buf);
+    return net_err_t::NET_ERR_OK;
+}
+
+net_err_t PktBuffer::set_cont_header(uint32_t size) {
+    if (size > m_capacity) {
+        TINYTCP_LOG_ERROR(g_logger) << "size(" << size << ") > m_capacity(" << m_capacity << ")";
+        return net_err_t::NET_ERR_SIZE;
+    }
+    if (size > g_pktbuf_blk_size->value()) {
+        TINYTCP_LOG_ERROR(g_logger) << "size(" << size << ") > g_pktbuf_blk_size(" << g_pktbuf_blk_size->value() << ")";
+        return net_err_t::NET_ERR_SIZE;
+    }
+    PktBlock* first_blk = m_blk_list.front();
+    uint32_t first_size = first_blk->get_size();
+    if (size <= first_size) {
+        return net_err_t::NET_ERR_OK;
+    }
+    auto pktmgr = PktMgr::get_instance();
+
+    memmove(first_blk->get_payload(), first_blk->get_data(), first_size);
+    first_blk->set_data(first_blk->get_payload());
+    uint8_t* ptr = first_blk->get_payload() + first_size;
+    uint32_t remain_size = size - first_size;
+    auto it = m_blk_list.begin();
+    ++it; // 把第一个块的数据移好位置之后,从第二个继续移动
+    while (remain_size && it != m_blk_list.end()) {
+        PktBlock* now_blk = *it;
+        uint32_t cur_size = std::min(remain_size, now_blk->get_size());
+        remain_size -= cur_size;
+        memcpy(ptr, now_blk->get_data(), cur_size);
+        ptr += cur_size;
+        first_blk->set_size(first_blk->get_size() + cur_size);
+        now_blk->set_data(now_blk->get_data() + cur_size);
+        now_blk->set_size(now_blk->get_size() - cur_size);
+        if (now_blk->get_size() == 0U) {
+            it = m_blk_list.erase(it);
+            pktmgr->release_pktblock(now_blk);
+        }
+    }
+    return net_err_t::NET_ERR_OK;
+}
+
 void PktBuffer::debug_print() {
 
     uint64_t total_size = 0;
@@ -292,6 +347,15 @@ PktManager::PktManager() {
         ok = m_pkt_blk->free(blk);
         TINYTCP_ASSERT2(ok, "m_pkt_blk->free error, size=" + std::to_string(m_pkt_blk->size()));
     }
+    auto buf_cnt = g_pktbuf_buf_cnt->value();
+    for (int i = 0; i < buf_cnt; ++i) {
+        PktBuffer* buf;
+        bool ok = m_pkt_buf->alloc((void**)&buf, 0);
+        TINYTCP_ASSERT2(ok, "m_pkt_buf->alloc error");
+        new (buf) PktBuffer();
+        ok = m_pkt_buf->free(buf);
+        TINYTCP_ASSERT2(ok, "m_pkt_buf->free error, size=" + std::to_string(m_pkt_buf->size()));
+    }
 }
 
 PktBlock* PktManager::get_pktblock() {
@@ -313,6 +377,7 @@ PktBuffer* PktManager::get_pktbuffer() {
     if (!m_pkt_buf->alloc((void**)&ptr, 0)) {
         return nullptr;
     }
+    ptr->reset();
     return ptr;
 }
 
