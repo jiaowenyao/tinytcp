@@ -39,16 +39,36 @@ uint64_t const PktBlock::get_last_size() const noexcept {
 }
 
 PktBuffer::PktBuffer()
-    : m_capacity(0U) {
+    : m_capacity(0U)
+    , m_ref(1) {
 
 }
 
 void PktBuffer::init() {
     m_capacity = 0U;
+    m_ref = 1;
 }
 
 void PktBuffer::reset() {
     m_capacity = 0U;
+    m_ref = 1;
+}
+
+uint8_t* PktBuffer::get_data() {
+    if (m_blk_list.empty()) {
+        return nullptr;
+    }
+    return m_blk_list.front()->get_data();
+}
+
+void PktBuffer::reset_access() {
+    m_pos = 0;
+    m_cur_blk = m_blk_list.end();
+    m_blk_offset = nullptr;
+    if (!m_blk_list.empty()) {
+        m_cur_blk = m_blk_list.begin();
+        m_blk_offset = (*m_cur_blk)->get_data();
+    }
 }
 
 PktBuffer::~PktBuffer() {
@@ -63,6 +83,7 @@ bool PktBuffer::alloc(uint32_t size, bool alloc_front, bool insert_front) {
     std::vector<PktBlock*> blk_list; // 先把分配出来的指针存起来，方便出问题后销毁
     uint32_t _size = size;
     m_capacity += _size;
+    m_ref = 1;
     auto pktmgr = PktMgr::get_instance();
     PktBlock* first_block = nullptr;
     while (size) {
@@ -119,17 +140,21 @@ bool PktBuffer::alloc(uint32_t size, bool alloc_front, bool insert_front) {
         }
     }
 
+    reset_access();
     return true;
 }
 
 bool PktBuffer::free() {
-    auto pktmgr = PktMgr::get_instance();
-    while (!m_blk_list.empty()) {
-        auto blk = m_blk_list.front();
-        m_blk_list.pop_front();
-        pktmgr->release_pktblock(blk);
+    if ((--m_ref) == 0) {
+        auto pktmgr = PktMgr::get_instance();
+        while (!m_blk_list.empty()) {
+            auto blk = m_blk_list.front();
+            m_blk_list.pop_front();
+            pktmgr->release_pktblock(blk);
+        }
+        pktmgr->release_pktbuffer(this);
+        m_capacity = 0;
     }
-    m_capacity = 0;
     return true;
 }
 
@@ -311,6 +336,152 @@ net_err_t PktBuffer::set_cont_header(uint32_t size) {
             pktmgr->release_pktblock(now_blk);
         }
     }
+    return net_err_t::NET_ERR_OK;
+}
+
+net_err_t PktBuffer::seek(uint32_t offset) {
+    if (m_pos == offset) {
+        return net_err_t::NET_ERR_OK;
+    }
+
+    if (offset < 0 || offset > m_capacity) {
+        TINYTCP_LOG_ERROR(g_logger) << "offset error";
+        return net_err_t::NET_ERR_SIZE;
+    }
+
+    uint32_t move_bytes = 0;
+    if (offset < m_pos) {
+        m_cur_blk = m_blk_list.begin();
+        m_blk_offset = (*m_cur_blk)->get_data();
+        m_pos = 0;
+        move_bytes = offset;
+    }
+    else {
+        move_bytes = offset - m_pos;
+    }
+
+    while (move_bytes) {
+        uint32_t remain_size = cur_blk_remain_size();
+        uint32_t cur_move = std::min(remain_size, move_bytes);
+        move_forward(cur_move);
+        move_bytes -= cur_move;
+    }
+
+    return net_err_t::NET_ERR_OK;
+}
+
+net_err_t PktBuffer::copy(PktBuffer* src, uint32_t size) {
+    if (total_blk_remain() < size || src->total_blk_remain() < size) {
+        TINYTCP_LOG_ERROR(g_logger) << "size too big";
+        return net_err_t::NET_ERR_SIZE;
+    }
+
+    while (size) {
+        uint32_t dest_remain = cur_blk_remain_size();
+        uint32_t src_remain = src->cur_blk_remain_size();
+        uint32_t copy_size = std::min(dest_remain, src_remain);
+        copy_size = std::min(size, copy_size);
+        memcpy(m_blk_offset, src->get_blk_offset(), copy_size);
+        move_forward(copy_size);
+        src->move_forward(copy_size);
+        size -= copy_size;
+    }
+
+    return net_err_t::NET_ERR_OK;
+}
+
+net_err_t PktBuffer::fill(uint8_t v, uint32_t size) {
+    if (!size) {
+        TINYTCP_LOG_ERROR(g_logger) << "fill error param";
+        return net_err_t::NET_ERR_PARAM;
+    }
+
+    int remain_size = m_capacity - m_pos;
+    if (remain_size < size) {
+        TINYTCP_LOG_ERROR(g_logger) << "fill size too big, size=" << size << ", remain_size=" << remain_size << ", m_pos=" << m_pos;
+        return net_err_t::NET_ERR_SIZE;
+    }
+
+    while (size) {
+        uint32_t blk_size = cur_blk_remain_size();
+        uint32_t fill_size = std::min(size, blk_size);
+        memset(m_blk_offset, v, fill_size);
+        move_forward(fill_size);
+        size -= fill_size;
+    }
+
+    return net_err_t::NET_ERR_OK;
+}
+
+uint32_t PktBuffer::cur_blk_remain_size() {
+    if (m_cur_blk == m_blk_list.end()) {
+        return 0;
+    }
+    return (uint32_t)((*m_cur_blk)->get_data() + (*m_cur_blk)->get_size() - m_blk_offset);
+}
+
+void PktBuffer::move_forward(uint32_t size) {
+    PktBlock* cur_blk = *m_cur_blk;
+    // 不用担心m_pos和接下来的m_blk_offset对不上,在调用时size不会超过cur_blk
+    m_pos += size;
+    m_blk_offset += size;
+
+    if (m_blk_offset >= cur_blk->get_data() + cur_blk->get_size()) {
+        ++m_cur_blk;
+        if (m_cur_blk != m_blk_list.end()) {
+            m_blk_offset = (*m_cur_blk)->get_data();
+        }
+        else {
+            m_blk_offset = nullptr;
+        }
+    }
+}
+
+net_err_t PktBuffer::write(const uint8_t* src, uint32_t size) {
+    if (!src || !size) {
+        TINYTCP_LOG_ERROR(g_logger) << "write error param";
+        return net_err_t::NET_ERR_PARAM;
+    }
+
+    int remain_size = m_capacity - m_pos;
+    if (remain_size < size) {
+        TINYTCP_LOG_ERROR(g_logger) << "write size too big, size=" << size << ", remain_size=" << remain_size << ", m_pos=" << m_pos;
+        return net_err_t::NET_ERR_SIZE;
+    }
+
+    while (size) {
+        uint32_t blk_size = cur_blk_remain_size();
+        uint32_t copy_size = std::min(size, blk_size);
+        memcpy(m_blk_offset, src, copy_size);
+        move_forward(copy_size);
+        src += copy_size;
+        size -= copy_size;
+    }
+
+    return net_err_t::NET_ERR_OK;
+}
+
+net_err_t PktBuffer::read(uint8_t* dest, uint32_t size) {
+    if (!dest || !size) {
+        TINYTCP_LOG_ERROR(g_logger) << "write error param";
+        return net_err_t::NET_ERR_PARAM;
+    }
+
+    int remain_size = m_capacity - m_pos;
+    if (remain_size < size) {
+        TINYTCP_LOG_ERROR(g_logger) << "read size too big, size=" << size << ", remain_size=" << remain_size << ", m_pos=" << m_pos;
+        return net_err_t::NET_ERR_SIZE;
+    }
+
+    while (size) {
+        uint32_t blk_size = cur_blk_remain_size();
+        uint32_t copy_size = std::min(size, blk_size);
+        memcpy(dest, m_blk_offset, copy_size);
+        move_forward(copy_size);
+        dest += copy_size;
+        size -= copy_size;
+    }
+
     return net_err_t::NET_ERR_OK;
 }
 

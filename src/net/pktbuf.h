@@ -42,11 +42,19 @@ public:
     void init();
     void reset();
 
+    void reset_access();
+
     // 分配多少字节的空间
     bool alloc(uint32_t size, bool alloc_front = true, bool insert_front = false);
     bool free();
 
-    const std::list<PktBlock*>& get_list() const { return m_blk_list; }
+    const std::list<PktBlock*>& get_list() const noexcept { return m_blk_list; }
+    const uint8_t* get_blk_offset() const noexcept { return m_blk_offset; }
+    uint32_t get_capacity() const noexcept { return m_capacity; }
+    uint32_t total_blk_remain() const noexcept { return m_capacity - m_pos; }
+    uint32_t get_pos() const noexcept { return m_pos; }
+    std::list<PktBlock*>::iterator get_cur_blk() const noexcept { return m_cur_blk; }
+    uint8_t* get_data();
 
     // 增加报头, is_cont:包头空间是否需要连续
     net_err_t alloc_header(uint32_t size, bool is_cont = true);
@@ -56,6 +64,21 @@ public:
     // 调整包头，调成连续的
     net_err_t set_cont_header(uint32_t size);
 
+    // 读写
+    net_err_t write(const uint8_t* src, uint32_t size);
+    net_err_t read(uint8_t* dest, uint32_t size);
+    net_err_t seek(uint32_t offset);
+    // 从另一个PktBuffer中拷贝数据进来
+    net_err_t copy(PktBuffer* src, uint32_t size);
+    // 填充数据包
+    net_err_t fill(uint8_t v, uint32_t size);
+
+    // 当前指向块的剩余大小
+    uint32_t cur_blk_remain_size();
+
+    // 移动包到下一个位置,如果跨越包,指向开头
+    void move_forward(uint32_t size);
+
     // 调试打印
     void debug_print();
 
@@ -64,6 +87,13 @@ private:
 
     // 头插法插入数据块，方便后续加入包头
     std::list<PktBlock*> m_blk_list;
+
+    // 读写相关
+    int32_t m_pos;
+    std::list<PktBlock*>::iterator m_cur_blk;
+    uint8_t* m_blk_offset;
+
+    std::atomic_int m_ref;
 
     // PktBuffer* prev = nullptr;
     // PktBuffer* next = nullptr;
