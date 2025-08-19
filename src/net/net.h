@@ -20,6 +20,8 @@ public:
     net_err_t init()  override;
     net_err_t start() override;
 
+    INetWork* get_network() const noexcept { return m_network.get(); }
+
     void work_thread_func();
 
 private:

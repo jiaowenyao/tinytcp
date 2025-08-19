@@ -1,6 +1,8 @@
 #pragma once
 
 #include <memory>
+#include <list>
+#include "netif.h"
 #include "net_err.h"
 #include "protocol_stack.h"
 #include "src/thread.h"
@@ -13,7 +15,7 @@ public:
     using uptr = std::unique_ptr<INetWork>;
 
     explicit INetWork(IProtocolStack* protocal_stack);
-    virtual ~INetWork() = default;
+    virtual ~INetWork();
     virtual net_err_t init() = 0;
     virtual net_err_t start() = 0;
     // 接收网卡数据
@@ -23,15 +25,22 @@ public:
     // 把接收到的数据放入协议栈的消息队列中，并设置等待时间
     virtual net_err_t msg_send(exmsg_t* msg, int32_t timeout_ms) = 0;
 
+public:
+    INetIF* netif_open(const char* dev_name, void* ops_data = nullptr);
+
 
 protected:
     Thread::uptr m_recv_thread = nullptr;
     Thread::uptr m_send_thread = nullptr;
-
     IProtocolStack* m_protocal_stack = nullptr;
+    std::list<INetIF*> m_netif_list;      // 网络接口列表
+    INetIF* m_default_netif = nullptr;    // 默认使用的网络接口
 
-private:
-
+protected:
+    using NetIFFactoryFunc = std::function<std::unique_ptr<INetIF>(const char*, void*)>;
+    static std::map<std::string, NetIFFactoryFunc> s_netif_factory_registry;
+public:
+    static bool register_netif_factory(const std::string& type_name, NetIFFactoryFunc factory_func);
 };
 
 
