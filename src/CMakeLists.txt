@@ -17,6 +17,7 @@ set(LIB_SRC
     net/memblock.cc
     net/network.cc
     net/pktbuf.cc
+    net/ipaddr.cc
     net/netif.cc
 )
 

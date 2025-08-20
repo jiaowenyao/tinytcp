@@ -11,6 +11,8 @@ set(LIBRARY_OUTPUT_PATH ${PROJECT_SOURCE_DIR}/lib)
 
 # plat
 add_definitions(-DSYS_PLAT_LINUX)
+# debug
+add_definitions(-DDEBUG_INETIF)
 
 include_directories(
     ${PROJECT_SOURCE_DIR}
