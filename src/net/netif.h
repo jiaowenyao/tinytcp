@@ -4,9 +4,8 @@
 #include "net_err.h"
 #include "pktbuf.h"
 #include "src/lock_free_ring_queue.h"
+#include "src/thread.h"
 #include <string.h>
-#include <functional>
-#include <map>
 
 namespace tinytcp {
 
@@ -21,6 +20,15 @@ struct netif_hwaddr_t {
     netif_hwaddr_t() : len(0) {
         memset(addr, 0, sizeof(addr));
     }
+    netif_hwaddr_t(const uint8_t* _addr, uint8_t _len)
+        : len(_len) {
+        mempcpy(addr, _addr, _len);
+    }
+
+    void reset(const uint8_t* _addr, uint8_t _len) {
+        len = _len;
+        mempcpy(addr, _addr, _len);
+    }
 
     const netif_hwaddr_t operator=(const netif_hwaddr_t& other) {
         if (this == &other) {
@@ -30,6 +38,11 @@ struct netif_hwaddr_t {
         len = other.len;
         return *this;
     }
+};
+
+struct pcap_data_t {
+    const char* ip;
+    const uint8_t* hwaddr;
 };
 
 
@@ -67,6 +80,7 @@ public:
     netif_type_t get_type() const noexcept { return m_type; }
     uint32_t get_mtu() const noexcept { return m_mtu; }
     int32_t get_state() const noexcept { return m_state; }
+    void* get_ops_data() const noexcept { return m_ops_data; }
 
     void set_name(const char* name);
     void set_mtu(uint32_t mtu) noexcept { m_mtu = mtu; }
@@ -91,6 +105,10 @@ public:
     virtual net_err_t open() { return net_err_t::NET_ERR_OK; }
     virtual net_err_t close();
     virtual net_err_t send() { return net_err_t::NET_ERR_OK; }
+
+protected:
+    Thread::uptr m_recv_thread = nullptr;
+    Thread::uptr m_send_thread = nullptr;
 
 protected:
     INetWork* m_network;
@@ -128,7 +146,12 @@ private:
 
 class EtherNet : public INetIF {
 public:
+    EtherNet(INetWork* network, const char* name, void* ops_data = nullptr);
+    ~EtherNet();
 
+    net_err_t open() override;
+    net_err_t close() override;
+    net_err_t send() override;
 private:
 
 };

@@ -4,6 +4,7 @@
 #include "macro.h"
 #include "magic_enum.h"
 #include "network.h"
+#include "plat/sys_plat.h"
 #include <iomanip>
 
 
@@ -126,8 +127,9 @@ net_err_t INetIF::put_buf_to_in_queue(PktBuffer* buf, int timeout_ms) {
     bool ok = m_in_q->push(buf, timeout_ms);
     if (ok) {
         m_network->exmsg_netif_in(this);
+        return net_err_t::NET_ERR_OK;
     }
-    return net_err_t::NET_ERR_OK;
+    return net_err_t::NET_ERR_FULL;
 }
 
 PktBuffer* INetIF::get_buf_from_out_queue(int timeout_ms) {
@@ -164,7 +166,8 @@ LoopNet::~LoopNet() {
 net_err_t LoopNet::open() {
     m_type = NETIF_TYPE_LOOP;
 
-    ipaddr_from_str(m_ipaddr, "127.0.0.1");
+    // ipaddr_from_str(m_ipaddr, "127.0.0.1");
+    m_ipaddr = "127.0.0.1";
     ipaddr_from_str(m_netmask, "255.0.0.0");
 
     // test
@@ -191,6 +194,47 @@ net_err_t LoopNet::send() {
             return err;
         }
     }
+    return net_err_t::NET_ERR_OK;
+}
+
+EtherNet::EtherNet(INetWork* network, const char* name, void* ops_data)
+    : INetIF(network, name, ops_data) {
+
+}
+
+EtherNet::~EtherNet() {
+
+}
+
+net_err_t EtherNet::open() {
+    pcap_data_t* dev_data = (pcap_data_t*)m_ops_data;
+    pcap_t* pcap = pcap_device_open(dev_data->ip, dev_data->hwaddr);
+
+    if (pcap == nullptr) {
+        TINYTCP_LOG_ERROR(g_logger) << "pcap open failed!, name=" << m_name;
+        return net_err_t::NET_ERR_IO;
+    }
+
+    m_type = NETIF_TYPE_ETHER;
+    m_mtu = 1500;
+    ipaddr_from_str(m_ipaddr, dev_data->ip);
+    m_hwaddr.reset(dev_data->hwaddr, 6);
+
+    m_ops_data = pcap;
+    m_send_thread = std::make_unique<Thread>(std::bind(&INetWork::send_func, m_network, this), "netif(" + std::string(m_name) + ")_send_thread");
+    m_recv_thread = std::make_unique<Thread>(std::bind(&INetWork::recv_func, m_network, this), "netif(" + std::string(m_name) + ")_recv_thread");
+
+    return net_err_t::NET_ERR_OK;
+}
+
+net_err_t EtherNet::close() {
+    pcap_t* pcap = (pcap_t*)m_ops_data;
+    pcap_close(pcap);
+    return net_err_t::NET_ERR_OK;
+}
+
+net_err_t EtherNet::send() {
+
     return net_err_t::NET_ERR_OK;
 }
 

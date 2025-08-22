@@ -4,6 +4,7 @@
 #include "src/config.h"
 #include "src/macro.h"
 #include "src/log.h"
+#include "magic_enum.h"
 
 
 namespace tinytcp {
@@ -45,12 +46,41 @@ void ProtocolStack::work_thread_func() {
             continue;
         }
 
-        TINYTCP_LOG_DEBUG(g_logger) << "work thread recv msg, msg_id=" << msg->id;
+        TINYTCP_LOG_DEBUG(g_logger)
+            << "work thread recv msg=" << (uint64_t)msg
+            << " msg_type=" << magic_enum::enum_name(msg->type);
+
+        switch (msg->type) {
+            case exmsg_t::NET_EXMSG_NETIF_IN: {
+                TINYTCP_LOG_DEBUG(g_logger) << "do netif in";
+                do_netif_in(msg);
+                break;
+            }
+            default:
+                break;
+        }
 
         // 工作线程消费完之后把内存块放回去
         release_msg_block(msg);
     }
 }
+
+net_err_t ProtocolStack::do_netif_in(exmsg_t* msg) {
+    INetIF* netif = msg->netif.netif;
+
+    while (true) {
+        PktBuffer* buf = netif->get_buf_from_in_queue(0);
+        if (buf == nullptr) {
+            TINYTCP_LOG_ERROR(g_logger) << "do_netif_in get buf error!!!";
+            return net_err_t::NET_ERR_MEM;
+        }
+        // TINYTCP_LOG_INFO(g_logger) << "recv a packet";
+        buf->free();
+    }
+
+    return net_err_t::NET_ERR_OK;
+}
+
 
 
 } // namespace tinytcp

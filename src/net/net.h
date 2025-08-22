@@ -23,6 +23,7 @@ public:
     INetWork* get_network() const noexcept { return m_network.get(); }
 
     void work_thread_func();
+    net_err_t do_netif_in(exmsg_t* msg);
 
 private:
     INetWork::uptr m_network;

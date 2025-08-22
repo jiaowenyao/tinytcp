@@ -5,7 +5,7 @@
 #include "netif.h"
 #include "net_err.h"
 #include "protocol_stack.h"
-#include "src/thread.h"
+#include <map>
 
 namespace tinytcp {
 
@@ -20,6 +20,8 @@ public:
     virtual ~INetWork();
     virtual net_err_t init() = 0;
     virtual net_err_t start() = 0;
+    virtual void recv_func(void*) {}
+    virtual void send_func(void*) {}
 
 public:
     // 把接收到的数据放入协议栈的消息队列中，并设置等待时间
@@ -45,8 +47,6 @@ public:
     void debug_print();
 
 protected:
-    Thread::uptr m_recv_thread = nullptr;
-    Thread::uptr m_send_thread = nullptr;
     IProtocolStack* m_protocal_stack = nullptr;
     std::list<INetIF*> m_netif_list;      // 网络接口列表
     INetIF* m_default_netif = nullptr;    // 默认使用的网络接口
@@ -70,8 +70,8 @@ public:
     net_err_t init() override;
     net_err_t start() override;
     // 接收和发送线程函数
-    void recv_func();
-    void send_func();
+    void recv_func(void*) override;
+    void send_func(void*) override;
 
 private:
 };

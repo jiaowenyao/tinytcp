@@ -20,12 +20,14 @@ struct ipaddr_t {
     };
 
     ipaddr_t() : type(IPADDR_V4), q_addr(0) {}
+    ipaddr_t(const char* str);
 
     const ipaddr_t operator=(const ipaddr_t& other) {
         type = other.type;
         q_addr = other.q_addr;
         return *this;
     }
+
 };
 
 std::ostream& operator<<(std::ostream& os, const ipaddr_t& ipaddr);

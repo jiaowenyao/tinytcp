@@ -1,6 +1,7 @@
 
 #include "network.h"
 #include "src/log.h"
+#include "plat/sys_plat.h"
 
 namespace tinytcp {
 
@@ -33,6 +34,12 @@ std::list<INetIF*>::iterator INetWork::find_netif_by_name(const std::string& nam
     // for (auto& it = m_netif_list.begin(); it != m_netif_list.end(); ++it) {
     //     if ((*it)->)
     // }
+    for (auto it = m_netif_list.begin(); it != m_netif_list.end(); ++it) {
+        if (strcmp((*it)->get_name(), name.c_str())) {
+            return it;
+        }
+    }
+    return m_netif_list.end();
 }
 
 net_err_t INetWork::exmsg_netif_in(INetIF* netif) {
@@ -44,7 +51,7 @@ net_err_t INetWork::exmsg_netif_in(INetIF* netif) {
     }
     static uint32_t id = 0U;
     msg->type = exmsg_t::EXMSGTYPE::NET_EXMSG_NETIF_IN;
-    msg->id = id++;
+    msg->netif.netif = netif;
 
     net_err_t err = msg_send(msg, 0);
     if ((int)err < 0) {
@@ -173,8 +180,6 @@ net_err_t INetWork::put_buf_to_out_queue(NetListIt netif_it, PktBuffer* buf, int
 PcapNetWork::PcapNetWork(IProtocolStack* protocal_stack)
     : INetWork(protocal_stack) {
 
-    m_send_thread = std::make_unique<Thread>(std::bind(&PcapNetWork::send_func, this), "network_send_thread");
-    m_recv_thread = std::make_unique<Thread>(std::bind(&PcapNetWork::recv_func, this), "network_recv_thread");
 }
 
 net_err_t PcapNetWork::init()  {
@@ -187,16 +192,42 @@ net_err_t PcapNetWork::start() {
     return net_err_t::NET_ERR_OK;
 }
 
-void PcapNetWork::recv_func() {
+void PcapNetWork::recv_func(void* arg) {
     TINYTCP_LOG_INFO(g_logger) << "PcapNetWork recv begin";
+    INetIF* netif = static_cast<INetIF*>(arg);
+    pcap_t* pcap = (pcap_t*)netif->get_ops_data();
+    auto pktmgr = PktMgr::get_instance();
     while (true) {
-        sleep(1);
-        // exmsg_netif_in();
+        struct pcap_pkthdr* pkthdr;
+        const uint8_t* pkt_data;
+        if (pcap_next_ex(pcap, &pkthdr, &pkt_data)) {
+            continue;
+        }
+        PktBuffer* buf = pktmgr->get_pktbuffer();
+        if (buf == nullptr) {
+            TINYTCP_LOG_WARN(g_logger) << "get_pktbuffer == nullptr";
+            continue;
+        }
+        bool ok = buf->alloc(pkthdr->len);
+        if (!ok) {
+            TINYTCP_LOG_WARN(g_logger) << "buf alloc error";
+            continue;
+        }
+        buf->reset_access();
+        buf->write(pkt_data, pkthdr->len);
+
+        if ((int8_t)netif->put_buf_to_in_queue(buf) < 0) {
+            TINYTCP_LOG_WARN(g_logger) << "put buf error";
+            buf->free();
+            continue;
+        }
     }
 }
 
-void PcapNetWork::send_func() {
-
+void PcapNetWork::send_func(void* arg) {
+    while (true) {
+        sleep(1);
+    }
 }
 
 namespace {
@@ -205,6 +236,12 @@ bool _loop_net_registered = INetWork::register_netif_factory("loop",
     [](INetWork* network, const char* name, void* ops_data) -> std::unique_ptr<INetIF> {
         return std::make_unique<LoopNet>(network, name, ops_data);
     });
+
+bool _eth0_net_registered = INetWork::register_netif_factory("eth0",
+    [](INetWork* network, const char* name, void* ops_data) -> std::unique_ptr<INetIF> {
+        return std::make_unique<EtherNet>(network, name, ops_data);
+    });
+
 
 };
 
