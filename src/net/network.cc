@@ -1,6 +1,7 @@
 
 #include "network.h"
 #include "src/log.h"
+#include "macro.h"
 #include "plat/sys_plat.h"
 
 namespace tinytcp {
@@ -110,6 +111,7 @@ INetIF* INetWork::netif_open(const char* dev_name, void* ops_data) {
         inetif->close();
         return nullptr;
     }
+    set_active(inetif.get());
 
     m_netif_list.push_back(inetif.get());
     INetIF* inetif_ptr = inetif.release();
@@ -197,12 +199,30 @@ void PcapNetWork::recv_func(void* arg) {
     INetIF* netif = static_cast<INetIF*>(arg);
     pcap_t* pcap = (pcap_t*)netif->get_ops_data();
     auto pktmgr = PktMgr::get_instance();
+
+    // test: 在wsl中，用bpf过滤一下arp
+    // struct bpf_program fp;
+    // bpf_u_int32 net, mask;
+    // char errbuf[PCAP_ERRBUF_SIZE];
+    // TINYTCP_ASSERT2(pcap_lookupnet(netif->get_name(), &net, &mask, errbuf) != -1, "lookupnet error");
+    // ipaddr_t _mask;
+    // _mask.q_addr = mask;
+    // TINYTCP_LOG_INFO(g_logger) << "mask=" << _mask;
+    // char filter_exp[] = "not arp and not ip and not icmp";
+    // int err = pcap_compile(pcap, &fp, filter_exp, 0, mask);
+    // if (err != 0) {
+    //     TINYTCP_LOG_ERROR(g_logger) << pcap_geterr(pcap);
+    //     TINYTCP_ASSERT2(0, "bpf compile error");
+    // }
+    // pcap_setfilter(pcap, &fp);
+
     while (true) {
         struct pcap_pkthdr* pkthdr;
         const uint8_t* pkt_data;
-        if (pcap_next_ex(pcap, &pkthdr, &pkt_data)) {
+        if (pcap_next_ex(pcap, &pkthdr, &pkt_data) != 1) {
             continue;
         }
+        TINYTCP_LOG_DEBUG(g_logger) << "pkt_data len=" << pkthdr->len;
         PktBuffer* buf = pktmgr->get_pktbuffer();
         if (buf == nullptr) {
             TINYTCP_LOG_WARN(g_logger) << "get_pktbuffer == nullptr";
@@ -222,6 +242,8 @@ void PcapNetWork::recv_func(void* arg) {
             continue;
         }
     }
+
+    TINYTCP_LOG_ERROR(g_logger) << "PcapNetWork recv end";
 }
 
 void PcapNetWork::send_func(void* arg) {

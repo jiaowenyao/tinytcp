@@ -25,10 +25,10 @@ int main() {
     // p.start();
 
     auto network = p.get_network();
-    auto netif = network->netif_open("loop");
+    auto loop = network->netif_open("loop");
 
 
-    uint8_t hwaddr[] = {0x00, 0x15, 0x5d, 0x4b, 0x97, 0x15};
+    uint8_t hwaddr[] = {0x00, 0x15, 0x5d, 0x4b, 0x97, 0x15, '\0'};
     tinytcp::pcap_data_t pcap_data {
         .ip = "172.27.241.212",
         .hwaddr = hwaddr
@@ -39,7 +39,7 @@ int main() {
 
     tinytcp::PktBuffer* buf = pktmgr->get_pktbuffer();
     buf->alloc(100);
-    netif->netif_out(tinytcp::ipaddr_t(), buf);
+    // netif->netif_out(tinytcp::ipaddr_t(), buf);
 
     while (1) {
         std::this_thread::yield();

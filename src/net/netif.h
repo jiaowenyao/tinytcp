@@ -85,6 +85,9 @@ public:
     void set_name(const char* name);
     void set_mtu(uint32_t mtu) noexcept { m_mtu = mtu; }
     void set_state(NETIF_STATE state) noexcept { m_state = state; }
+    void set_ipaddr(const ipaddr_t& addr) noexcept { m_ipaddr = addr; }
+    void set_netmask(const ipaddr_t& addr) noexcept { m_netmask = addr; }
+    void set_gateway(const ipaddr_t& addr) noexcept { m_gateway = addr; }
 
     void clear_in_queue();
     void clear_out_queue();
@@ -94,6 +97,8 @@ public:
     net_err_t put_buf_to_in_queue(PktBuffer* buf, int timeout_ms = -1);
     PktBuffer* get_buf_from_out_queue(int timeout_ms = -1);
     net_err_t put_buf_to_out_queue(PktBuffer* buf, int timeout_ms = -1);
+    uint32_t get_in_queue_size() const noexcept { return m_in_q->size(); }
+    uint32_t get_out_queue_size() const noexcept { return m_out_q->size(); }
 
     // 把数据包发送给指定地址
     net_err_t netif_out(const ipaddr_t& ipaddr, PktBuffer* buf);

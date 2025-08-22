@@ -68,13 +68,13 @@ void ProtocolStack::work_thread_func() {
 net_err_t ProtocolStack::do_netif_in(exmsg_t* msg) {
     INetIF* netif = msg->netif.netif;
 
-    while (true) {
+    while (netif->get_in_queue_size() != 0) {
         PktBuffer* buf = netif->get_buf_from_in_queue(0);
         if (buf == nullptr) {
             TINYTCP_LOG_ERROR(g_logger) << "do_netif_in get buf error!!!";
             return net_err_t::NET_ERR_MEM;
         }
-        // TINYTCP_LOG_INFO(g_logger) << "recv a packet";
+        TINYTCP_LOG_INFO(g_logger) << "recv a packet";
         buf->free();
     }
 

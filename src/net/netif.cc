@@ -119,8 +119,11 @@ PktBuffer* INetIF::get_buf_from_in_queue(int timeout_ms) {
     if (timeout_ms < 0) {
         timeout_ms = -1;
     }
-    m_in_q->pop(&buf, timeout_ms);
-    return buf;
+    bool ok = m_in_q->pop(&buf, timeout_ms);
+    if (ok) {
+        return buf;
+    }
+    return nullptr;
 }
 
 net_err_t INetIF::put_buf_to_in_queue(PktBuffer* buf, int timeout_ms) {
@@ -137,8 +140,11 @@ PktBuffer* INetIF::get_buf_from_out_queue(int timeout_ms) {
     if (timeout_ms < 0) {
         timeout_ms = -1;
     }
-    m_out_q->pop(&buf, timeout_ms);
-    return buf;
+    bool ok = m_out_q->pop(&buf, timeout_ms);
+    if (ok) {
+        return buf;
+    }
+    return nullptr;
 }
 
 net_err_t INetIF::put_buf_to_out_queue(PktBuffer* buf, int timeout_ms) {
@@ -209,6 +215,10 @@ EtherNet::~EtherNet() {
 net_err_t EtherNet::open() {
     pcap_data_t* dev_data = (pcap_data_t*)m_ops_data;
     pcap_t* pcap = pcap_device_open(dev_data->ip, dev_data->hwaddr);
+    char errbuf[1024] = {0};
+    if (pcap_getnonblock(pcap, errbuf) == -1) {
+        TINYTCP_LOG_ERROR(g_logger) << "Non-block mode error: " << errbuf << std::endl;
+    }
 
     if (pcap == nullptr) {
         TINYTCP_LOG_ERROR(g_logger) << "pcap open failed!, name=" << m_name;
