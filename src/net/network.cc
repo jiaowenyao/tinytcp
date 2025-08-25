@@ -63,10 +63,6 @@ net_err_t INetWork::exmsg_netif_in(INetIF* netif) {
     return net_err_t::NET_ERR_OK;
 }
 
-net_err_t INetWork::exmsg_netif_out() {
-
-    return net_err_t::NET_ERR_OK;
-}
 
 
 net_err_t INetWork::netif_close(std::list<INetIF*>::iterator& netif_it) {
@@ -138,6 +134,12 @@ net_err_t INetWork::set_active(INetIF* netif) {
         m_default_netif = netif;
     }
 
+    net_err_t err = netif->link_open();
+    if ((int8_t)err < 0) {
+        TINYTCP_LOG_ERROR(g_logger) << "netif link open error";
+        return err;
+    }
+
     netif->set_state(INetIF::NETIF_ACTIVE);
     return net_err_t::NET_ERR_OK;
 }
@@ -147,6 +149,8 @@ net_err_t INetWork::set_deactive(INetIF* netif) {
         TINYTCP_LOG_ERROR(g_logger) << "netif is not actived";
         return net_err_t::NET_ERR_STATE;
     }
+
+    netif->link_close();
 
     netif->clear_in_queue();
     netif->clear_out_queue();
@@ -247,9 +251,37 @@ void PcapNetWork::recv_func(void* arg) {
 }
 
 void PcapNetWork::send_func(void* arg) {
+    TINYTCP_LOG_INFO(g_logger) << "PcapNetWork send begin";
+    INetIF* netif = static_cast<INetIF*>(arg);
+    pcap_t* pcap = (pcap_t*)netif->get_ops_data();
+    auto pktmgr = PktMgr::get_instance();
+
+    // 以太网协议, 数据缓冲区:1500, 目的地址:6, 源地址:6, 类型:2 
+    static uint8_t rw_buffer[1500 + 6 + 6 + 2]; // 最后还有4个字节的校验位，网卡会自动填充, 代码中不用管
     while (true) {
-        sleep(1);
+        PktBuffer* buf = netif->get_buf_from_out_queue(0);
+        if (buf == nullptr) {
+            continue;
+        }
+
+        uint32_t total_size = buf->get_capacity();
+        buf->reset_access();
+        memset(rw_buffer, 0, sizeof(rw_buffer));
+        buf->read(rw_buffer, total_size);
+        buf->free();
+
+        if (pcap_inject(pcap, rw_buffer, total_size) == -1) {
+            TINYTCP_LOG_ERROR(g_logger) << "pcap_inject error: " << pcap_geterr(pcap) << ", send size=" << total_size;
+        }
+        else {
+            TINYTCP_LOG_DEBUG(g_logger) << "pcap_inject send successfully, data=" << std::make_pair(std::string((const char*)rw_buffer, total_size), true);
+        }
     }
+}
+
+net_err_t PcapNetWork::exmsg_netif_out(INetIF* netif) {
+
+    return net_err_t::NET_ERR_OK;
 }
 
 namespace {

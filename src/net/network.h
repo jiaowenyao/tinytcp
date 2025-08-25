@@ -28,8 +28,8 @@ public:
     net_err_t msg_send(exmsg_t* msg, int32_t timeout_ms);
     // 接收网卡数据
     net_err_t exmsg_netif_in(INetIF* netif);
-    // 把数据从网卡中发出
-    net_err_t exmsg_netif_out();
+    // 把数据从网卡中发出, 具体调用哪个库就交给子类去实现
+    virtual net_err_t exmsg_netif_out(INetIF* netif) = 0;
 
     INetIF* netif_open(const char* dev_name, void* ops_data = nullptr);
     std::list<INetIF*>::iterator find_netif_by_name(const std::string& name);
@@ -72,6 +72,7 @@ public:
     // 接收和发送线程函数
     void recv_func(void*) override;
     void send_func(void*) override;
+    net_err_t exmsg_netif_out(INetIF* netif) override;
 
 private:
 };

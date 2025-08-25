@@ -2,6 +2,7 @@
 #include "log.h"
 #include <execinfo.h>
 #include <sys/time.h>
+#include <iomanip>
 
 
 namespace tinytcp {
@@ -48,6 +49,28 @@ uint64_t get_current_us() {
     struct timeval tv;
     gettimeofday(&tv, NULL);
     return tv.tv_sec * 1000 * 1000UL + tv.tv_usec;
+}
+
+
+std::string string_to_hex(const std::string& str) {
+    std::stringstream ss;
+    ss << std::hex << std::setfill('0');
+
+    for (size_t i = 0; i < str.size(); ++i) {
+        ss << std::setw(2) << static_cast<uint32_t>(static_cast<uint8_t>(str[i])) << " ";
+    }
+
+    return ss.str();
+}
+
+std::ostream& operator<<(std::ostream& os, const std::pair<const std::string&, bool>& p) {
+    // 如果第二个参数为 true，则输出十六进制
+    if (p.second) {
+        os << string_to_hex(p.first);
+    } else {
+        os << p.first;
+    }
+    return os;
 }
 
 } // namespace tinytcp

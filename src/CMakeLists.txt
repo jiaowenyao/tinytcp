@@ -19,6 +19,7 @@ set(LIB_SRC
     net/pktbuf.cc
     net/ipaddr.cc
     net/netif.cc
+    net/link_layer.cc
 )
 
 add_library(tinytcp SHARED ${LIB_SRC})

@@ -28,6 +28,13 @@ struct ipaddr_t {
         return *this;
     }
 
+    std::string to_string() const {
+        return std::to_string(a_addr[0]) + "."
+            +  std::to_string(a_addr[1]) + "."
+            +  std::to_string(a_addr[2]) + "."
+            +  std::to_string(a_addr[3]);
+    }
+
 };
 
 std::ostream& operator<<(std::ostream& os, const ipaddr_t& ipaddr);

@@ -18,6 +18,8 @@ std::string back_trace_to_string(int size = 64, int skip = 2, const std::string&
 uint64_t get_current_ms();
 uint64_t get_current_us();
 
+std::string string_to_hex(const std::string& str);
+std::ostream& operator<<(std::ostream& os, const std::pair<const std::string&, bool>& p);
 
 } // namespace tinytcp
 

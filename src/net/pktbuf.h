@@ -55,6 +55,7 @@ public:
     uint32_t get_pos() const noexcept { return m_pos; }
     std::list<PktBlock*>::iterator get_cur_blk() const noexcept { return m_cur_blk; }
     uint8_t* get_data();
+    void add_ref() noexcept { ++m_ref; }
 
     // 增加报头, is_cont:包头空间是否需要连续
     net_err_t alloc_header(uint32_t size, bool is_cont = true);
@@ -78,6 +79,7 @@ public:
 
     // 移动包到下一个位置,如果跨越包,指向开头
     void move_forward(uint32_t size);
+
 
     // 调试打印
     void debug_print();

@@ -4,7 +4,10 @@
 #include "macro.h"
 #include "magic_enum.h"
 #include "network.h"
+#include "link_layer.h"
+#include "protocol.h"
 #include "plat/sys_plat.h"
+#include "src/endiantool.h"
 #include <iomanip>
 
 
@@ -121,6 +124,7 @@ PktBuffer* INetIF::get_buf_from_in_queue(int timeout_ms) {
     }
     bool ok = m_in_q->pop(&buf, timeout_ms);
     if (ok) {
+        buf->reset_access();
         return buf;
     }
     return nullptr;
@@ -142,23 +146,38 @@ PktBuffer* INetIF::get_buf_from_out_queue(int timeout_ms) {
     }
     bool ok = m_out_q->pop(&buf, timeout_ms);
     if (ok) {
+        buf->reset_access();
         return buf;
     }
     return nullptr;
 }
 
 net_err_t INetIF::put_buf_to_out_queue(PktBuffer* buf, int timeout_ms) {
-    m_out_q->push(buf, timeout_ms);
-    return net_err_t::NET_ERR_OK;
+    bool ok = m_out_q->push(buf, timeout_ms);
+    if (ok) {
+        return net_err_t::NET_ERR_OK;
+    }
+    return net_err_t::NET_ERR_FULL;
 }
 
 net_err_t INetIF::netif_out(const ipaddr_t& ipaddr, PktBuffer* buf) {
-    net_err_t err = put_buf_to_out_queue(buf, 0);
-    if ((int8_t)err < 0) {
-        TINYTCP_LOG_INFO(g_logger) << "netif out failed";
-        return err;
+    if (m_type != NETIF_TYPE_LOOP) {
+        net_err_t err = link_out(ipaddr, buf);
+        if ((int8_t)err < 0) {
+            TINYTCP_LOG_WARN(g_logger) << "netif out: link out failed";
+            return err;
+        }
+        return net_err_t::NET_ERR_OK;
     }
-    return send();
+    else {
+        net_err_t err = put_buf_to_out_queue(buf, 0);
+        if ((int8_t)err < 0) {
+            TINYTCP_LOG_INFO(g_logger) << "netif out: put buf failed";
+            return err;
+        }
+        return send();
+    }
+    return net_err_t::NET_ERR_OK;
 }
 
 LoopNet::LoopNet(INetWork* network, const char* name, void* ops_data)
@@ -191,6 +210,7 @@ net_err_t LoopNet::close() {
     return net_err_t::NET_ERR_OK;
 }
 
+// 环回接口只用把接收到的数据重新放到输入队列即可
 net_err_t LoopNet::send() {
     PktBuffer* buf = get_buf_from_out_queue(0);
     if (buf != nullptr) {
@@ -226,7 +246,7 @@ net_err_t EtherNet::open() {
     }
 
     m_type = NETIF_TYPE_ETHER;
-    m_mtu = 1500;
+    m_mtu = ETHER_MTU;
     ipaddr_from_str(m_ipaddr, dev_data->ip);
     m_hwaddr.reset(dev_data->hwaddr, 6);
 
@@ -244,6 +264,117 @@ net_err_t EtherNet::close() {
 }
 
 net_err_t EtherNet::send() {
+
+    return net_err_t::NET_ERR_OK;
+    // return m_network->exmsg_netif_out(this);
+}
+
+static net_err_t is_pkt_ok(ether_pkt_t* frame, int total_size) {
+    if (total_size > (sizeof(ether_hdr_t) + ETHER_MTU)) {
+        TINYTCP_LOG_WARN(g_logger) << "frame size too big, size=" << total_size;
+        return net_err_t::NET_ERR_SIZE;
+    }
+    if (total_size < sizeof(ether_hdr_t)) {
+        TINYTCP_LOG_WARN(g_logger) << "frame size too small, size=" << total_size;
+        return net_err_t::NET_ERR_SIZE;
+    }
+    return net_err_t::NET_ERR_OK;
+}
+
+net_err_t EtherNet::link_open() {
+
+    return net_err_t::NET_ERR_OK;
+}
+
+void EtherNet::link_close() {
+
+}
+
+net_err_t EtherNet::link_in(PktBuffer* buf) {
+    buf->set_cont_header(sizeof(ether_hdr_t));
+    ether_pkt_t* pkt = (ether_pkt_t*)buf->get_data();
+    net_err_t err = is_pkt_ok(pkt, buf->get_capacity());
+    if ((int8_t)err < 0) {
+        TINYTCP_LOG_WARN(g_logger) << "ether pkt error";
+        return err;
+    }
+
+    // debug_print_ether_pkt(*pkt, buf->get_capacity());
+    switch (net_to_host(pkt->hdr.protocol)) {
+        case NET_PROTOCOL_ARP: {
+            TINYTCP_LOG_DEBUG(g_logger) << "get arp pkt";
+            break;
+        }
+        case NET_PROTOCOL_IPv4: {
+            TINYTCP_LOG_DEBUG(g_logger) << "get ipv4 pkt";
+            break;
+        }
+        default: {
+            TINYTCP_LOG_DEBUG(g_logger) << "get other";
+            break;
+        }
+    }
+
+    return net_err_t::NET_ERR_OK;
+}
+
+net_err_t EtherNet::link_out(const ipaddr_t& ip, PktBuffer* buf) {
+    net_err_t err = ether_row_out(NET_PROTOCOL_ARP, ether_broadcast_addr(), buf);
+    if ((int8_t)err < 0) {
+        TINYTCP_LOG_ERROR(g_logger) << "ether_row_out error: " << magic_enum::enum_name(err);
+        return err;
+    }
+
+    return net_err_t::NET_ERR_OK;
+}
+
+net_err_t EtherNet::ether_row_out(uint16_t protocol, const uint8_t* dest, PktBuffer* buf) {
+    uint32_t size = buf->get_capacity();
+    if (size < ETHER_DATA_MIN) {
+        TINYTCP_LOG_INFO(g_logger) << "resize from " << size << " to " << ETHER_DATA_MIN;
+        net_err_t err = buf->resize(ETHER_DATA_MIN);
+        if ((int8_t)err < 0) {
+            TINYTCP_LOG_INFO(g_logger) << "resize buf error: " << magic_enum::enum_name(err);
+            return err;
+        }
+        buf->reset_access();
+        buf->seek(size);
+        buf->fill(0x00, ETHER_DATA_MIN - size);
+
+        size = ETHER_DATA_MIN;
+    }
+
+    net_err_t err = buf->alloc_header(sizeof(ether_hdr_t));
+    if ((int8_t)err < 0) {
+        TINYTCP_LOG_WARN(g_logger) << "alloc header error: " << magic_enum::enum_name(err);
+        return err;
+    }
+
+    ether_pkt_t* pkt = (ether_pkt_t*)buf->get_data();
+    memcpy(pkt->hdr.dest, dest, ETHER_HWA_SIZE);
+    memcpy(pkt->hdr.src, m_hwaddr.addr, ETHER_HWA_SIZE);
+    pkt->hdr.protocol = host_to_net(protocol);
+
+    // test
+    debug_print_ether_pkt(*pkt, size);
+    char test[size + sizeof(ether_hdr_t)];
+    buf->seek(0);
+    buf->read((uint8_t*)test, sizeof(test));
+    std::string str = std::string(test, sizeof(test));
+    TINYTCP_LOG_DEBUG(g_logger) << "pkt real data:" << std::make_pair(str, true);
+    // test
+
+    if (memcmp(m_hwaddr.addr, dest, ETHER_HWA_SIZE) == 0) {
+        return put_buf_to_in_queue(buf, 0);
+    }
+    else {
+        err = put_buf_to_out_queue(buf, 0);
+        if ((int8_t)err < 0) {
+            TINYTCP_LOG_WARN(g_logger) << "put_buf_to_out_queue error: " << magic_enum::enum_name(err);
+            return err;
+        }
+        return send();
+    }
 
     return net_err_t::NET_ERR_OK;
 }

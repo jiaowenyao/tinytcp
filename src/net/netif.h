@@ -100,6 +100,12 @@ public:
     uint32_t get_in_queue_size() const noexcept { return m_in_q->size(); }
     uint32_t get_out_queue_size() const noexcept { return m_out_q->size(); }
 
+    // 数据链路层操作
+    virtual net_err_t link_open() { return net_err_t::NET_ERR_OK; }
+    virtual void link_close() {}
+    virtual net_err_t link_in(PktBuffer* buf) { return net_err_t::NET_ERR_OK; }
+    virtual net_err_t link_out(const ipaddr_t& ip, PktBuffer* buf) { return net_err_t::NET_ERR_OK; }
+
     // 把数据包发送给指定地址
     net_err_t netif_out(const ipaddr_t& ipaddr, PktBuffer* buf);
 
@@ -157,6 +163,13 @@ public:
     net_err_t open() override;
     net_err_t close() override;
     net_err_t send() override;
+
+    net_err_t link_open() override;
+    void link_close() override;
+    net_err_t link_in(PktBuffer* buf) override;
+    net_err_t link_out(const ipaddr_t& ip, PktBuffer* buf) override;
+
+    net_err_t ether_row_out(uint16_t protocol, const uint8_t* dest, PktBuffer* buf);
 private:
 
 };
