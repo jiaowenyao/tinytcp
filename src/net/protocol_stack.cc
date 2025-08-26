@@ -18,6 +18,9 @@ net_err_t IProtocolStack::release_msg_block(exmsg_t* msg) {
 
 net_err_t IProtocolStack::push_msg(exmsg_t* msg, uint32_t timeout_ms) {
     bool ok = m_msg_queue->push(msg, timeout_ms);
+    if (!ok) {
+        return net_err_t::NET_ERR_MEM;
+    }
     return net_err_t::NET_ERR_OK;
 }
 

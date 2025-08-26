@@ -10,6 +10,13 @@
 template class std::list<tinytcp::PktBlock*>;
 static tinytcp::Logger::ptr g_logger = TINYTCP_LOG_ROOT();
 
+void print1() {
+    TINYTCP_LOG_INFO(g_logger) << __FUNCTION__;
+}
+
+void print2() {
+    TINYTCP_LOG_INFO(g_logger) << __FUNCTION__;
+}
 
 int main() {
 
@@ -48,6 +55,9 @@ int main() {
     buf->fill(0x53, 32);
     eth0->netif_out(tinytcp::ipaddr_t(), buf);
     // netif->netif_out(tinytcp::ipaddr_t(), buf);
+
+    p.add_timer(1000, print1, true);
+    p.add_timer(3000, print2, true);
 
     while (1) {
         std::this_thread::yield();

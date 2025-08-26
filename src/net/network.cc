@@ -52,7 +52,9 @@ net_err_t INetWork::exmsg_netif_in(INetIF* netif) {
     }
     static uint32_t id = 0U;
     msg->type = exmsg_t::EXMSGTYPE::NET_EXMSG_NETIF_IN;
-    msg->netif.netif = netif;
+    msg->netif = msg_netif_t(netif);
+    // msg->data.emplace<msg_netif_t>(netif);
+    // msg->data = msg_netif_t(netif);
 
     net_err_t err = msg_send(msg, 0);
     if ((int)err < 0) {

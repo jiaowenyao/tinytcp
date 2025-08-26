@@ -12,6 +12,7 @@ set(LIB_SRC
     mutex.cc
     thread.cc
     util.cc
+    timer.cc
     net/protocol_stack.cc
     net/net.cc
     net/memblock.cc
