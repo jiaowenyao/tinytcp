@@ -28,6 +28,10 @@ struct ipaddr_t {
         return *this;
     }
 
+    bool operator==(const ipaddr_t& other) {
+        return q_addr == other.q_addr;
+    }
+
     std::string to_string() const {
         return std::to_string(a_addr[0]) + "."
             +  std::to_string(a_addr[1]) + "."

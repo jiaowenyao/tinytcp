@@ -53,14 +53,16 @@ int main() {
     tinytcp::PktBuffer* buf = pktmgr->get_pktbuffer();
     buf->alloc(32);
     buf->fill(0x53, 32);
-    eth0->netif_out(tinytcp::ipaddr_t(), buf);
+    // eth0->netif_out(tinytcp::ipaddr_t(), buf);
     // netif->netif_out(tinytcp::ipaddr_t(), buf);
 
-    p.add_timer(1000, print1, true);
-    p.add_timer(3000, print2, true);
+    // p.add_timer(1000, print1, true);
+    // p.add_timer(3000, print2, true);
 
     while (1) {
-        std::this_thread::yield();
+        eth0->netif_out("192.168.200.1", buf);
+        sleep(1);
+        // std::this_thread::yield();
         // sleep(10);
     }
 

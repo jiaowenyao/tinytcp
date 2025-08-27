@@ -3,6 +3,7 @@
 #include "endiantool.h"
 #include <string.h>
 #include <iomanip>
+#include "src/log.h"
 
 
 

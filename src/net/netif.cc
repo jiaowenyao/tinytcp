@@ -319,16 +319,32 @@ net_err_t EtherNet::link_in(PktBuffer* buf) {
 }
 
 net_err_t EtherNet::link_out(const ipaddr_t& ip, PktBuffer* buf) {
-    net_err_t err = ether_row_out(NET_PROTOCOL_ARP, ether_broadcast_addr(), buf);
-    if ((int8_t)err < 0) {
-        TINYTCP_LOG_ERROR(g_logger) << "ether_row_out error: " << magic_enum::enum_name(err);
+    if (m_ipaddr == ip) {
+        net_err_t err = ether_raw_out(NET_PROTOCOL_ARP, ether_broadcast_addr(), buf);
+        if ((int8_t)err < 0) {
+            TINYTCP_LOG_ERROR(g_logger) << "ether_row_out error: " << magic_enum::enum_name(err);
+            buf->free();
+        }
         return err;
     }
 
-    return net_err_t::NET_ERR_OK;
+    return make_arp_request(ip);
 }
 
-net_err_t EtherNet::ether_row_out(uint16_t protocol, const uint8_t* dest, PktBuffer* buf) {
+net_err_t EtherNet::make_arp_request(const ipaddr_t& dest) {
+    PktBuffer* buf = m_arp_processor.make_request(this, dest);
+    if (buf == nullptr) {
+        TINYTCP_LOG_WARN(g_logger) << "make_arp_request error";
+        return net_err_t::NET_ERR_NONE;
+    }
+    net_err_t err = ether_raw_out(NET_PROTOCOL_ARP, ether_broadcast_addr(), buf);
+    if ((int8_t)err < 0) {
+        buf->free();
+    }
+    return err;
+}
+
+net_err_t EtherNet::ether_raw_out(uint16_t protocol, const uint8_t* dest, PktBuffer* buf) {
     uint32_t size = buf->get_capacity();
     if (size < ETHER_DATA_MIN) {
         TINYTCP_LOG_INFO(g_logger) << "resize from " << size << " to " << ETHER_DATA_MIN;
@@ -356,12 +372,12 @@ net_err_t EtherNet::ether_row_out(uint16_t protocol, const uint8_t* dest, PktBuf
     pkt->hdr.protocol = host_to_net(protocol);
 
     // test
-    debug_print_ether_pkt(*pkt, size);
-    char test[size + sizeof(ether_hdr_t)];
-    buf->seek(0);
-    buf->read((uint8_t*)test, sizeof(test));
-    std::string str = std::string(test, sizeof(test));
-    TINYTCP_LOG_DEBUG(g_logger) << "pkt real data:" << std::make_pair(str, true);
+    // debug_print_ether_pkt(*pkt, size);
+    // char test[size + sizeof(ether_hdr_t)];
+    // buf->seek(0);
+    // buf->read((uint8_t*)test, sizeof(test));
+    // std::string str = std::string(test, sizeof(test));
+    // TINYTCP_LOG_DEBUG(g_logger) << "pkt real data:" << std::make_pair(str, true);
     // test
 
     if (memcmp(m_hwaddr.addr, dest, ETHER_HWA_SIZE) == 0) {

@@ -2,7 +2,6 @@
 
 #include <inttypes.h>
 #include <iostream>
-#include "log.h"
 
 
 namespace tinytcp {

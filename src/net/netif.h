@@ -5,6 +5,7 @@
 #include "pktbuf.h"
 #include "src/lock_free_ring_queue.h"
 #include "src/thread.h"
+#include "arp.h"
 #include <string.h>
 
 namespace tinytcp {
@@ -169,9 +170,10 @@ public:
     net_err_t link_in(PktBuffer* buf) override;
     net_err_t link_out(const ipaddr_t& ip, PktBuffer* buf) override;
 
-    net_err_t ether_row_out(uint16_t protocol, const uint8_t* dest, PktBuffer* buf);
+    net_err_t ether_raw_out(uint16_t protocol, const uint8_t* dest, PktBuffer* buf);
+    net_err_t make_arp_request(const ipaddr_t& dest);
 private:
-
+    ARPProcessor m_arp_processor;
 };
 
 
