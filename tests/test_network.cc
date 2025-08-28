@@ -60,7 +60,7 @@ int main() {
     // p.add_timer(3000, print2, true);
 
     while (1) {
-        eth0->netif_out("192.168.200.1", buf);
+        // eth0->netif_out("192.168.200.1", buf);
         sleep(1);
         // std::this_thread::yield();
         // sleep(10);

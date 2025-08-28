@@ -254,6 +254,14 @@ net_err_t EtherNet::open() {
     m_send_thread = std::make_unique<Thread>(std::bind(&INetWork::send_func, m_network, this), "netif(" + std::string(m_name) + ")_send_thread");
     m_recv_thread = std::make_unique<Thread>(std::bind(&INetWork::recv_func, m_network, this), "netif(" + std::string(m_name) + ")_recv_thread");
 
+    PktBuffer::ptr buf = m_arp_processor.make_gratuitous(this);
+    if (buf != nullptr) {
+        net_err_t err = ether_raw_out(NET_PROTOCOL_ARP, ether_broadcast_addr(), buf);
+        if ((int8_t)err < 0) {
+            TINYTCP_LOG_WARN(g_logger) << "ether open: send a gratuitous error";
+        }
+    }
+
     return net_err_t::NET_ERR_OK;
 }
 
@@ -290,6 +298,27 @@ void EtherNet::link_close() {
 
 }
 
+net_err_t EtherNet::arp_in(PktBuffer::ptr buf) {
+    TINYTCP_LOG_INFO(g_logger) << "arp in";
+
+    net_err_t err = buf->set_cont_header(sizeof(arp_pkt_t));
+    if ((int8_t)err < 0) {
+        return err;
+    }
+
+    arp_pkt_t* arp_packet = (arp_pkt_t*)buf->get_data();
+    if (!arp_packet->is_pkt_ok(buf->get_capacity())) {
+        TINYTCP_LOG_WARN(g_logger) << "arp_packet check error";
+        return net_err_t::NET_ERR_NONE;
+    }
+
+    if (net_to_host(arp_packet->opcode) == ARP_REQUEST) {
+        return make_arp_response(buf);
+    }
+
+    return net_err_t::NET_ERR_OK;
+}
+
 net_err_t EtherNet::link_in(PktBuffer::ptr buf) {
     buf->set_cont_header(sizeof(ether_hdr_t));
     ether_pkt_t* pkt = (ether_pkt_t*)buf->get_data();
@@ -303,6 +332,8 @@ net_err_t EtherNet::link_in(PktBuffer::ptr buf) {
     switch (net_to_host(pkt->hdr.protocol)) {
         case NET_PROTOCOL_ARP: {
             TINYTCP_LOG_DEBUG(g_logger) << "get arp pkt";
+            buf->remove_header(sizeof(ether_hdr_t));
+            return arp_in(buf);
             break;
         }
         case NET_PROTOCOL_IPv4: {
@@ -342,6 +373,11 @@ net_err_t EtherNet::make_arp_request(const ipaddr_t& dest) {
         // buf->free();
     }
     return err;
+}
+
+net_err_t EtherNet::make_arp_response(PktBuffer::ptr buf) {
+    m_arp_processor.make_response(this, buf);
+    return ether_raw_out(NET_PROTOCOL_ARP, ((arp_pkt_t*)buf->get_data())->target_hwaddr, buf);
 }
 
 net_err_t EtherNet::ether_raw_out(uint16_t protocol, const uint8_t* dest, PktBuffer::ptr buf) {

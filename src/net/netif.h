@@ -171,7 +171,11 @@ public:
     net_err_t link_out(const ipaddr_t& ip, PktBuffer::ptr buf) override;
 
     net_err_t ether_raw_out(uint16_t protocol, const uint8_t* dest, PktBuffer::ptr buf);
+
+    // arp
     net_err_t make_arp_request(const ipaddr_t& dest);
+    net_err_t make_arp_response(PktBuffer::ptr buf);
+    net_err_t arp_in(PktBuffer::ptr buf);
 private:
     ARPProcessor m_arp_processor;
 };

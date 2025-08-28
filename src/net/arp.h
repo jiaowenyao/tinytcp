@@ -23,6 +23,8 @@ struct arp_pkt_t {
     uint8_t sender_ipaddr[IPV4_ADDR_SIZE];
     uint8_t target_hwaddr[ETHER_HWA_SIZE];
     uint8_t target_ipaddr[IPV4_ADDR_SIZE];
+
+    bool is_pkt_ok(uint16_t size);
 };
 #pragma pack()
 
@@ -56,6 +58,8 @@ public:
     ~ARPProcessor();
 
     PktBuffer::ptr make_request(INetIF* netif, const ipaddr_t& dest);
+    PktBuffer::ptr make_gratuitous(INetIF* netif);
+    PktBuffer::ptr make_response(INetIF* netif, PktBuffer::ptr buf);
 
 // private:
 //     NetIF* netif;
