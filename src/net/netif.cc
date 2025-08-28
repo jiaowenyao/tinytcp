@@ -38,9 +38,9 @@ INetIF::INetIF(INetWork* network, const char* name, void* ops_data)
     , m_state(NETIF_OPENED)
     , m_ops_data(ops_data) {
     set_name(name);
-    m_in_q = std::make_unique<LockFreeRingQueue<PktBuffer*>>(g_netif_in_queue_size->value());
+    m_in_q = std::make_unique<LockFreeRingQueue<PktBuffer::ptr>>(g_netif_in_queue_size->value());
     TINYTCP_ASSERT2(m_in_q != nullptr, "m_in_q init error");
-    m_out_q = std::make_unique<LockFreeRingQueue<PktBuffer*>>(g_netif_out_queue_size->value());
+    m_out_q = std::make_unique<LockFreeRingQueue<PktBuffer::ptr>>(g_netif_out_queue_size->value());
     TINYTCP_ASSERT2(m_out_q != nullptr, "m_out_q init error");
 }
 
@@ -102,7 +102,7 @@ void INetIF::set_name(const char* name) {
 }
 
 void INetIF::clear_in_queue() {
-    PktBuffer* pktbuf;
+    PktBuffer::ptr pktbuf;
     while (!m_in_q->is_empty()) {
         m_in_q->pop(&pktbuf);
         pktbuf->free();
@@ -110,15 +110,15 @@ void INetIF::clear_in_queue() {
 }
 
 void INetIF::clear_out_queue() {
-    PktBuffer* pktbuf;
+    PktBuffer::ptr pktbuf;
     while (!m_out_q->is_empty()) {
         m_out_q->pop(&pktbuf);
         pktbuf->free();
     }
 }
 
-PktBuffer* INetIF::get_buf_from_in_queue(int timeout_ms) {
-    PktBuffer* buf;
+PktBuffer::ptr INetIF::get_buf_from_in_queue(int timeout_ms) {
+    PktBuffer::ptr buf;
     if (timeout_ms < 0) {
         timeout_ms = -1;
     }
@@ -130,7 +130,7 @@ PktBuffer* INetIF::get_buf_from_in_queue(int timeout_ms) {
     return nullptr;
 }
 
-net_err_t INetIF::put_buf_to_in_queue(PktBuffer* buf, int timeout_ms) {
+net_err_t INetIF::put_buf_to_in_queue(PktBuffer::ptr buf, int timeout_ms) {
     bool ok = m_in_q->push(buf, timeout_ms);
     if (ok) {
         m_network->exmsg_netif_in(this);
@@ -139,8 +139,8 @@ net_err_t INetIF::put_buf_to_in_queue(PktBuffer* buf, int timeout_ms) {
     return net_err_t::NET_ERR_FULL;
 }
 
-PktBuffer* INetIF::get_buf_from_out_queue(int timeout_ms) {
-    PktBuffer* buf;
+PktBuffer::ptr INetIF::get_buf_from_out_queue(int timeout_ms) {
+    PktBuffer::ptr buf;
     if (timeout_ms < 0) {
         timeout_ms = -1;
     }
@@ -152,7 +152,7 @@ PktBuffer* INetIF::get_buf_from_out_queue(int timeout_ms) {
     return nullptr;
 }
 
-net_err_t INetIF::put_buf_to_out_queue(PktBuffer* buf, int timeout_ms) {
+net_err_t INetIF::put_buf_to_out_queue(PktBuffer::ptr buf, int timeout_ms) {
     bool ok = m_out_q->push(buf, timeout_ms);
     if (ok) {
         return net_err_t::NET_ERR_OK;
@@ -160,7 +160,7 @@ net_err_t INetIF::put_buf_to_out_queue(PktBuffer* buf, int timeout_ms) {
     return net_err_t::NET_ERR_FULL;
 }
 
-net_err_t INetIF::netif_out(const ipaddr_t& ipaddr, PktBuffer* buf) {
+net_err_t INetIF::netif_out(const ipaddr_t& ipaddr, PktBuffer::ptr buf) {
     if (m_type != NETIF_TYPE_LOOP) {
         net_err_t err = link_out(ipaddr, buf);
         if ((int8_t)err < 0) {
@@ -212,11 +212,11 @@ net_err_t LoopNet::close() {
 
 // 环回接口只用把接收到的数据重新放到输入队列即可
 net_err_t LoopNet::send() {
-    PktBuffer* buf = get_buf_from_out_queue(0);
+    PktBuffer::ptr buf = get_buf_from_out_queue(0);
     if (buf != nullptr) {
         net_err_t err = put_buf_to_in_queue(buf, 0);
         if ((int8_t)err < 0) {
-            buf->free();
+            // buf->free();
             return err;
         }
     }
@@ -290,7 +290,7 @@ void EtherNet::link_close() {
 
 }
 
-net_err_t EtherNet::link_in(PktBuffer* buf) {
+net_err_t EtherNet::link_in(PktBuffer::ptr buf) {
     buf->set_cont_header(sizeof(ether_hdr_t));
     ether_pkt_t* pkt = (ether_pkt_t*)buf->get_data();
     net_err_t err = is_pkt_ok(pkt, buf->get_capacity());
@@ -318,12 +318,12 @@ net_err_t EtherNet::link_in(PktBuffer* buf) {
     return net_err_t::NET_ERR_OK;
 }
 
-net_err_t EtherNet::link_out(const ipaddr_t& ip, PktBuffer* buf) {
+net_err_t EtherNet::link_out(const ipaddr_t& ip, PktBuffer::ptr buf) {
     if (m_ipaddr == ip) {
         net_err_t err = ether_raw_out(NET_PROTOCOL_ARP, ether_broadcast_addr(), buf);
         if ((int8_t)err < 0) {
             TINYTCP_LOG_ERROR(g_logger) << "ether_row_out error: " << magic_enum::enum_name(err);
-            buf->free();
+            // buf->free();
         }
         return err;
     }
@@ -332,19 +332,19 @@ net_err_t EtherNet::link_out(const ipaddr_t& ip, PktBuffer* buf) {
 }
 
 net_err_t EtherNet::make_arp_request(const ipaddr_t& dest) {
-    PktBuffer* buf = m_arp_processor.make_request(this, dest);
+    PktBuffer::ptr buf = m_arp_processor.make_request(this, dest);
     if (buf == nullptr) {
         TINYTCP_LOG_WARN(g_logger) << "make_arp_request error";
         return net_err_t::NET_ERR_NONE;
     }
     net_err_t err = ether_raw_out(NET_PROTOCOL_ARP, ether_broadcast_addr(), buf);
     if ((int8_t)err < 0) {
-        buf->free();
+        // buf->free();
     }
     return err;
 }
 
-net_err_t EtherNet::ether_raw_out(uint16_t protocol, const uint8_t* dest, PktBuffer* buf) {
+net_err_t EtherNet::ether_raw_out(uint16_t protocol, const uint8_t* dest, PktBuffer::ptr buf) {
     uint32_t size = buf->get_capacity();
     if (size < ETHER_DATA_MIN) {
         TINYTCP_LOG_INFO(g_logger) << "resize from " << size << " to " << ETHER_DATA_MIN;

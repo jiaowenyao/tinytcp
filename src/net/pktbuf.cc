@@ -145,16 +145,14 @@ bool PktBuffer::alloc(uint32_t size, bool alloc_front, bool insert_front) {
 }
 
 bool PktBuffer::free() {
-    if ((--m_ref) == 0) {
-        auto pktmgr = PktMgr::get_instance();
-        while (!m_blk_list.empty()) {
-            auto blk = m_blk_list.front();
-            m_blk_list.pop_front();
-            pktmgr->release_pktblock(blk);
-        }
-        pktmgr->release_pktbuffer(this);
-        m_capacity = 0;
+    auto pktmgr = PktMgr::get_instance();
+    while (!m_blk_list.empty()) {
+        auto blk = m_blk_list.front();
+        m_blk_list.pop_front();
+        pktmgr->release_pktblock(blk);
     }
+    pktmgr->release_pktbuffer(this);
+    m_capacity = 0;
     return true;
 }
 
@@ -292,11 +290,11 @@ net_err_t PktBuffer::resize(uint32_t size) {
     return net_err_t::NET_ERR_OK;
 }
 
-net_err_t PktBuffer::merge_buf(PktBuffer* buf) {
+net_err_t PktBuffer::merge_buf(PktBuffer::ptr buf) {
     auto pktmgr = PktMgr::get_instance();
     m_blk_list.splice(m_blk_list.end(), buf->m_blk_list);
     m_capacity += buf->m_capacity;
-    pktmgr->release_pktbuffer(buf);
+    // pktmgr->release_pktbuffer(buf);
     return net_err_t::NET_ERR_OK;
 }
 
@@ -370,7 +368,7 @@ net_err_t PktBuffer::seek(uint32_t offset) {
     return net_err_t::NET_ERR_OK;
 }
 
-net_err_t PktBuffer::copy(PktBuffer* src, uint32_t size) {
+net_err_t PktBuffer::copy(PktBuffer::ptr src, uint32_t size) {
     if (total_blk_remain() < size || src->total_blk_remain() < size) {
         TINYTCP_LOG_ERROR(g_logger) << "size too big";
         return net_err_t::NET_ERR_SIZE;
@@ -520,11 +518,11 @@ PktManager::PktManager() {
     }
     auto buf_cnt = g_pktbuf_buf_cnt->value();
     for (int i = 0; i < buf_cnt; ++i) {
-        PktBuffer* buf;
+        PktBuffer::ptr buf;
         bool ok = m_pkt_buf->alloc((void**)&buf, 0);
         TINYTCP_ASSERT2(ok, "m_pkt_buf->alloc error");
-        new (buf) PktBuffer();
-        ok = m_pkt_buf->free(buf);
+        new (buf.get()) PktBuffer();
+        ok = m_pkt_buf->free(buf.get());
         TINYTCP_ASSERT2(ok, "m_pkt_buf->free error, size=" + std::to_string(m_pkt_buf->size()));
     }
 }
@@ -543,12 +541,15 @@ net_err_t PktManager::release_pktblock(PktBlock* ptr) {
     return net_err_t::NET_ERR_OK;
 }
 
-PktBuffer* PktManager::get_pktbuffer() {
-    PktBuffer* ptr;
-    if (!m_pkt_buf->alloc((void**)&ptr, 0)) {
+PktBuffer::ptr PktManager::get_pktbuffer() {
+    PktBuffer* buf;
+    if (!m_pkt_buf->alloc((void**)&buf, 0)) {
         return nullptr;
     }
-    ptr->reset();
+    buf->reset();
+    std::shared_ptr<PktBuffer> ptr(buf, [](PktBuffer* buf) {
+        buf->free();
+    });
     return ptr;
 }
 

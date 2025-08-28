@@ -37,6 +37,8 @@ private:
 // 数据包
 class PktBuffer {
 public:
+    using ptr = std::shared_ptr<PktBuffer>;
+
     PktBuffer();
     ~PktBuffer();
     void init();
@@ -61,7 +63,7 @@ public:
     net_err_t alloc_header(uint32_t size, bool is_cont = true);
     net_err_t remove_header(uint32_t size);
     net_err_t resize(uint32_t size);
-    net_err_t merge_buf(PktBuffer* buf);
+    net_err_t merge_buf(PktBuffer::ptr buf);
     // 调整包头，调成连续的
     net_err_t set_cont_header(uint32_t size);
 
@@ -70,7 +72,7 @@ public:
     net_err_t read(uint8_t* dest, uint32_t size);
     net_err_t seek(uint32_t offset);
     // 从另一个PktBuffer中拷贝数据进来
-    net_err_t copy(PktBuffer* src, uint32_t size);
+    net_err_t copy(PktBuffer::ptr src, uint32_t size);
     // 填充数据包
     net_err_t fill(uint8_t v, uint32_t size);
 
@@ -97,8 +99,6 @@ private:
 
     std::atomic_int m_ref;
 
-    // PktBuffer* prev = nullptr;
-    // PktBuffer* next = nullptr;
 };
 
 
@@ -111,7 +111,7 @@ public:
     PktBlock* get_pktblock();
     net_err_t release_pktblock(PktBlock* ptr);
 
-    PktBuffer* get_pktbuffer();
+    PktBuffer::ptr get_pktbuffer();
     net_err_t release_pktbuffer(PktBuffer* ptr);
 
     uint32_t get_blk_list_size() const { return m_pkt_blk->size(); }

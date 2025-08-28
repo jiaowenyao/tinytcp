@@ -39,10 +39,10 @@ public:
 
     void set_default(INetIF* netif) noexcept { m_default_netif = netif; }
 
-    PktBuffer* get_buf_from_in_queue(NetListIt netif_it, int timeout_ms = -1);
-    net_err_t put_buf_to_in_queue(NetListIt netif_it, PktBuffer* buf, int timeout_ms = -1);
-    PktBuffer* get_buf_from_out_queue(NetListIt netif_it, int timeout_ms = -1);
-    net_err_t put_buf_to_out_queue(NetListIt netif_it, PktBuffer* buf, int timeout_ms = -1);
+    PktBuffer::ptr get_buf_from_in_queue(NetListIt netif_it, int timeout_ms = -1);
+    net_err_t put_buf_to_in_queue(NetListIt netif_it, PktBuffer::ptr buf, int timeout_ms = -1);
+    PktBuffer::ptr get_buf_from_out_queue(NetListIt netif_it, int timeout_ms = -1);
+    net_err_t put_buf_to_out_queue(NetListIt netif_it, PktBuffer::ptr buf, int timeout_ms = -1);
 
     void debug_print();
 

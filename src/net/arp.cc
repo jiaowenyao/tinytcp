@@ -26,9 +26,9 @@ ARPProcessor::~ARPProcessor() {
 
 }
 
-PktBuffer* ARPProcessor::make_request(INetIF* netif, const ipaddr_t& dest) {
+PktBuffer::ptr ARPProcessor::make_request(INetIF* netif, const ipaddr_t& dest) {
     auto pktmgr = PktMgr::get_instance();
-    PktBuffer* buf = pktmgr->get_pktbuffer();
+    PktBuffer::ptr buf = pktmgr->get_pktbuffer();
     if (buf == nullptr) {
         TINYTCP_LOG_WARN(g_logger) << "alloc buf error";
         return nullptr;
@@ -37,7 +37,7 @@ PktBuffer* ARPProcessor::make_request(INetIF* netif, const ipaddr_t& dest) {
     bool ok = buf->alloc(sizeof(arp_pkt_t));
     if (!ok) {
         TINYTCP_LOG_WARN(g_logger) << "alloc block error";
-        buf->free();
+        // buf->free();
         return nullptr;
     }
 

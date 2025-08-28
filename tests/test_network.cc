@@ -50,7 +50,7 @@ int main() {
 
     network->debug_print();
 
-    tinytcp::PktBuffer* buf = pktmgr->get_pktbuffer();
+    tinytcp::PktBuffer::ptr buf = pktmgr->get_pktbuffer();
     buf->alloc(32);
     buf->fill(0x53, 32);
     // eth0->netif_out(tinytcp::ipaddr_t(), buf);

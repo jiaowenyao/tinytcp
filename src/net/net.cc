@@ -91,7 +91,7 @@ net_err_t ProtocolStack::do_netif_in(exmsg_t* msg) {
     INetIF* netif = msg->netif.netif;
 
     while (netif->get_in_queue_size() != 0) {
-        PktBuffer* buf = netif->get_buf_from_in_queue(0);
+        PktBuffer::ptr buf = netif->get_buf_from_in_queue(0);
         if (buf == nullptr) {
             TINYTCP_LOG_ERROR(g_logger) << "do_netif_in get buf error!!!";
             return net_err_t::NET_ERR_MEM;
@@ -100,7 +100,7 @@ net_err_t ProtocolStack::do_netif_in(exmsg_t* msg) {
         net_err_t err = netif->link_in(buf);
         if ((int8_t)err < 0) {
             TINYTCP_LOG_WARN(g_logger) << "netif link in error:" << magic_enum::enum_name(err);
-            buf->free();
+            // buf->free();
         }
         // TINYTCP_LOG_INFO(g_logger) << "recv a packet";
         // buf->fill(0x11, 6);

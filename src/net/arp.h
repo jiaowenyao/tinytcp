@@ -46,7 +46,7 @@ private:
     uint8_t hwaddr[ETHER_HWA_SIZE];
     arp_state state;
 
-    std::list<PktBuffer*> buf_list;
+    std::list<PktBuffer::ptr> buf_list;
     INetIF* netif;
 };
 
@@ -55,7 +55,7 @@ public:
     ARPProcessor();
     ~ARPProcessor();
 
-    PktBuffer* make_request(INetIF* netif, const ipaddr_t& dest);
+    PktBuffer::ptr make_request(INetIF* netif, const ipaddr_t& dest);
 
 // private:
 //     NetIF* netif;

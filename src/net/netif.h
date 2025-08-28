@@ -94,21 +94,21 @@ public:
     void clear_out_queue();
 
     // 操作网卡队列
-    PktBuffer* get_buf_from_in_queue(int timeout_ms = -1);
-    net_err_t put_buf_to_in_queue(PktBuffer* buf, int timeout_ms = -1);
-    PktBuffer* get_buf_from_out_queue(int timeout_ms = -1);
-    net_err_t put_buf_to_out_queue(PktBuffer* buf, int timeout_ms = -1);
+    PktBuffer::ptr get_buf_from_in_queue(int timeout_ms = -1);
+    net_err_t put_buf_to_in_queue(PktBuffer::ptr buf, int timeout_ms = -1);
+    PktBuffer::ptr get_buf_from_out_queue(int timeout_ms = -1);
+    net_err_t put_buf_to_out_queue(PktBuffer::ptr buf, int timeout_ms = -1);
     uint32_t get_in_queue_size() const noexcept { return m_in_q->size(); }
     uint32_t get_out_queue_size() const noexcept { return m_out_q->size(); }
 
     // 数据链路层操作
     virtual net_err_t link_open() { return net_err_t::NET_ERR_OK; }
     virtual void link_close() {}
-    virtual net_err_t link_in(PktBuffer* buf) { return net_err_t::NET_ERR_OK; }
-    virtual net_err_t link_out(const ipaddr_t& ip, PktBuffer* buf) { return net_err_t::NET_ERR_OK; }
+    virtual net_err_t link_in(PktBuffer::ptr buf) { return net_err_t::NET_ERR_OK; }
+    virtual net_err_t link_out(const ipaddr_t& ip, PktBuffer::ptr buf) { return net_err_t::NET_ERR_OK; }
 
     // 把数据包发送给指定地址
-    net_err_t netif_out(const ipaddr_t& ipaddr, PktBuffer* buf);
+    net_err_t netif_out(const ipaddr_t& ipaddr, PktBuffer::ptr buf);
 
     void debug_print();
 
@@ -137,8 +137,8 @@ protected:
 
     NETIF_STATE m_state;
 
-    LockFreeRingQueue<PktBuffer*>::uptr m_in_q;
-    LockFreeRingQueue<PktBuffer*>::uptr m_out_q;
+    LockFreeRingQueue<PktBuffer::ptr>::uptr m_in_q;
+    LockFreeRingQueue<PktBuffer::ptr>::uptr m_out_q;
 };
 
 net_err_t ipaddr_from_str(ipaddr_t& dest, const char* str);
@@ -167,10 +167,10 @@ public:
 
     net_err_t link_open() override;
     void link_close() override;
-    net_err_t link_in(PktBuffer* buf) override;
-    net_err_t link_out(const ipaddr_t& ip, PktBuffer* buf) override;
+    net_err_t link_in(PktBuffer::ptr buf) override;
+    net_err_t link_out(const ipaddr_t& ip, PktBuffer::ptr buf) override;
 
-    net_err_t ether_raw_out(uint16_t protocol, const uint8_t* dest, PktBuffer* buf);
+    net_err_t ether_raw_out(uint16_t protocol, const uint8_t* dest, PktBuffer::ptr buf);
     net_err_t make_arp_request(const ipaddr_t& dest);
 private:
     ARPProcessor m_arp_processor;

@@ -165,22 +165,22 @@ net_err_t INetWork::set_deactive(INetIF* netif) {
     return net_err_t::NET_ERR_OK;
 }
 
-PktBuffer* INetWork::get_buf_from_in_queue(NetListIt netif_it, int timeout_ms) {
-    PktBuffer* buf = (*netif_it)->get_buf_from_in_queue(timeout_ms);
+PktBuffer::ptr INetWork::get_buf_from_in_queue(NetListIt netif_it, int timeout_ms) {
+    PktBuffer::ptr buf = (*netif_it)->get_buf_from_in_queue(timeout_ms);
     return buf;
 }
 
-net_err_t INetWork::put_buf_to_in_queue(NetListIt netif_it, PktBuffer* buf, int timeout_ms) {
+net_err_t INetWork::put_buf_to_in_queue(NetListIt netif_it, PktBuffer::ptr buf, int timeout_ms) {
     (*netif_it)->put_buf_to_in_queue(buf, timeout_ms);
     return net_err_t::NET_ERR_OK;
 }
 
-PktBuffer* INetWork::get_buf_from_out_queue(NetListIt netif_it, int timeout_ms) {
-    PktBuffer* buf = (*netif_it)->get_buf_from_out_queue(timeout_ms);
+PktBuffer::ptr INetWork::get_buf_from_out_queue(NetListIt netif_it, int timeout_ms) {
+    PktBuffer::ptr buf = (*netif_it)->get_buf_from_out_queue(timeout_ms);
     return buf;
 }
 
-net_err_t INetWork::put_buf_to_out_queue(NetListIt netif_it, PktBuffer* buf, int timeout_ms) {
+net_err_t INetWork::put_buf_to_out_queue(NetListIt netif_it, PktBuffer::ptr buf, int timeout_ms) {
     (*netif_it)->put_buf_to_out_queue(buf, timeout_ms);
     return net_err_t::NET_ERR_OK;
 }
@@ -229,7 +229,7 @@ void PcapNetWork::recv_func(void* arg) {
             continue;
         }
         TINYTCP_LOG_DEBUG(g_logger) << "pkt_data len=" << pkthdr->len;
-        PktBuffer* buf = pktmgr->get_pktbuffer();
+        PktBuffer::ptr buf = pktmgr->get_pktbuffer();
         if (buf == nullptr) {
             TINYTCP_LOG_WARN(g_logger) << "get_pktbuffer == nullptr";
             continue;
@@ -244,7 +244,7 @@ void PcapNetWork::recv_func(void* arg) {
 
         if ((int8_t)netif->put_buf_to_in_queue(buf) < 0) {
             TINYTCP_LOG_WARN(g_logger) << "put buf error";
-            buf->free();
+            // buf->free();
             continue;
         }
     }
@@ -261,7 +261,7 @@ void PcapNetWork::send_func(void* arg) {
     // 以太网协议, 数据缓冲区:1500, 目的地址:6, 源地址:6, 类型:2 
     static uint8_t rw_buffer[1500 + 6 + 6 + 2]; // 最后还有4个字节的校验位，网卡会自动填充, 代码中不用管
     while (true) {
-        PktBuffer* buf = netif->get_buf_from_out_queue(0);
+        PktBuffer::ptr buf = netif->get_buf_from_out_queue(0);
         if (buf == nullptr) {
             continue;
         }
@@ -270,7 +270,7 @@ void PcapNetWork::send_func(void* arg) {
         buf->reset_access();
         memset(rw_buffer, 0, sizeof(rw_buffer));
         buf->read(rw_buffer, total_size);
-        buf->free();
+        // buf->free();
 
         if (pcap_inject(pcap, rw_buffer, total_size) == -1) {
             TINYTCP_LOG_ERROR(g_logger) << "pcap_inject error: " << pcap_geterr(pcap) << ", send size=" << total_size;

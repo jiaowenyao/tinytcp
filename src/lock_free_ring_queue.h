@@ -115,7 +115,7 @@ bool LockFreeRingQueue<T>::pop(T* data, uint32_t timeout_ms) {
             return false;  // Queue is empty
         }
 
-        *data = m_queue[index_of_queue(current_read_index)];
+        *data = std::move(m_queue[index_of_queue(current_read_index)]);
 
         if (m_read_index.compare_exchange_weak(current_read_index, current_read_index + 1U, std::memory_order_release,
                                                std::memory_order_relaxed)) {
