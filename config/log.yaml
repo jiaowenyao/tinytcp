@@ -18,3 +18,6 @@ tcp:
   msg_queue_size: 5
   # netif_in_queue_size: 5
   # netif_out_queue_size: 5
+
+arp:
+  # arp_cache_size: 100

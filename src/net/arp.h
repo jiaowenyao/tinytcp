@@ -28,12 +28,15 @@ struct arp_pkt_t {
 };
 #pragma pack()
 
-class INetIF;
+class EtherNet;
 class ARPProcessor;
 
 class ARPEntry {
 friend ARPProcessor;
+friend std::ostream& operator<<(std::ostream& os, const ARPEntry& arp_entry);
 public:
+    using ptr = std::shared_ptr<ARPEntry>;
+
     enum arp_state {
         NET_ARP_FREE,
         NET_ARP_WAITING,
@@ -43,28 +46,45 @@ public:
     ARPEntry();
     ~ARPEntry();
 
-private:
-    uint8_t ipaddr[IPV4_ADDR_SIZE];
-    uint8_t hwaddr[ETHER_HWA_SIZE];
-    arp_state state;
+    void clear_buf();
+    net_err_t cache_send_all();
 
-    std::list<PktBuffer::ptr> buf_list;
-    INetIF* netif;
+private:
+    uint8_t m_ipaddr[IPV4_ADDR_SIZE];
+    uint8_t m_hwaddr[ETHER_HWA_SIZE];
+    arp_state m_state;
+
+    int m_timeout = 0;
+    int m_retry_cnt = 0;
+
+    std::list<PktBuffer::ptr> m_buf_list;
+    EtherNet* m_netif;
 };
 
 class ARPProcessor {
 public:
+    using CacheIterator = std::list<ARPEntry::ptr>::iterator;
+
     ARPProcessor();
     ~ARPProcessor();
 
-    PktBuffer::ptr make_request(INetIF* netif, const ipaddr_t& dest);
-    PktBuffer::ptr make_gratuitous(INetIF* netif);
-    PktBuffer::ptr make_response(INetIF* netif, PktBuffer::ptr buf);
+    PktBuffer::ptr make_request(EtherNet* netif, const ipaddr_t& dest);
+    PktBuffer::ptr make_gratuitous(EtherNet* netif);
+    PktBuffer::ptr make_response(EtherNet* netif, PktBuffer::ptr buf);
 
-// private:
-//     NetIF* netif;
+    void debug_print();
 
+    ARPEntry::ptr cache_alloc();
+    void release_cache(ARPEntry* arp_entry);
+    CacheIterator cache_find(const ipaddr_t& ipaddr);
+    net_err_t cache_insert(EtherNet* netif, const ipaddr_t& ipaddr, uint8_t* hwaddr);
+
+private:
+    std::list<ARPEntry::ptr> m_cache_list;
 };
+
+std::ostream& operator<<(std::ostream& os, const arp_pkt_t& arp_pkt);
+std::ostream& operator<<(std::ostream& os, const ARPEntry& arp_entry);
 
 } // namespace tinytcp
 

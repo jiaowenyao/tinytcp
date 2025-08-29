@@ -3,11 +3,15 @@
 #include "endiantool.h"
 #include "protocol.h"
 #include "netif.h"
+#include "src/magic_enum.h"
+#include "src/config.h"
 
 
 namespace tinytcp {
 
 static Logger::ptr g_logger = TINYTCP_LOG_NAME("system");
+static ConfigVar<uint32_t>::ptr g_arp_cache_size =
+    Config::look_up("arp.arp_cache_size", (uint32_t)100, "arp cache_size");
 
 bool arp_pkt_t::is_pkt_ok(uint16_t size) {
     if (size < sizeof(arp_pkt_t)) {
@@ -40,6 +44,10 @@ ARPEntry::~ARPEntry() {
 
 }
 
+void ARPEntry::clear_buf() {
+    m_buf_list.clear();
+}
+
 ARPProcessor::ARPProcessor() {
 
 }
@@ -48,7 +56,19 @@ ARPProcessor::~ARPProcessor() {
 
 }
 
-PktBuffer::ptr ARPProcessor::make_request(INetIF* netif, const ipaddr_t& dest) {
+PktBuffer::ptr ARPProcessor::make_request(EtherNet* netif, const ipaddr_t& dest) {
+
+    // test
+    // uint8_t* ip = (uint8_t*)dest.a_addr;
+    // ip[0] = 0x1;
+    // cache_insert(netif, *(uint32_t*)ip, netif->get_hwaddr().addr);
+    // ip[0] = 0x2;
+    // cache_insert(netif, *(uint32_t*)ip, netif->get_hwaddr().addr);
+    // ip[0] = 0x3;
+    // cache_insert(netif, *(uint32_t*)ip, netif->get_hwaddr().addr);
+    // cache_insert(netif, *(uint32_t*)ip, netif->get_hwaddr().addr);
+
+
     auto pktmgr = PktMgr::get_instance();
     PktBuffer::ptr buf = pktmgr->get_pktbuffer();
     if (buf == nullptr) {
@@ -75,24 +95,139 @@ PktBuffer::ptr ARPProcessor::make_request(INetIF* netif, const ipaddr_t& dest) {
     memcpy(arp_packet->target_ipaddr, dest.a_addr, IPV4_ADDR_SIZE);
     memset(arp_packet->target_hwaddr, 0, ETHER_HWA_SIZE);
 
+    TINYTCP_LOG_DEBUG(g_logger) << *arp_packet;
     return buf;
 }
 
 
-PktBuffer::ptr ARPProcessor::make_gratuitous(INetIF* netif) {
+PktBuffer::ptr ARPProcessor::make_gratuitous(EtherNet* netif) {
     TINYTCP_LOG_INFO(g_logger) << "make a gratuitous arp...";
     return make_request(netif, netif->get_ipaddr());
 }
 
 
-PktBuffer::ptr ARPProcessor::make_response(INetIF* netif, PktBuffer::ptr buf) {
+PktBuffer::ptr ARPProcessor::make_response(EtherNet* netif, PktBuffer::ptr buf) {
     arp_pkt_t* arp_packet = (arp_pkt_t*)buf->get_data();
     arp_packet->opcode = host_to_net((uint16_t)ARP_REPLAY);
     memcpy(arp_packet->target_hwaddr, arp_packet->sender_hwaddr, ETHER_HWA_SIZE);
     memcpy(arp_packet->target_ipaddr, arp_packet->sender_ipaddr, IPV4_ADDR_SIZE);
     memcpy(arp_packet->sender_hwaddr, netif->get_hwaddr().addr, ETHER_HWA_SIZE);
     memcpy(arp_packet->sender_ipaddr, netif->get_ipaddr().a_addr, ETHER_HWA_SIZE);
+    TINYTCP_LOG_DEBUG(g_logger) << *arp_packet;
     return buf;
+}
+
+net_err_t ARPEntry::cache_send_all() {
+
+    for (auto& it : m_buf_list) {
+        net_err_t err = m_netif->ether_raw_out(NET_PROTOCOL_IPv4, m_hwaddr, it);
+        if ((int8_t)err < 0) {
+            TINYTCP_LOG_ERROR(g_logger) << "cache_send_all error";
+        }
+    }
+    m_buf_list.clear();
+
+    return net_err_t::NET_ERR_OK;
+}
+
+void ARPProcessor::debug_print() {
+    std::stringstream ss;
+    for (auto& it : m_cache_list) {
+        if (it->m_state == ARPEntry::NET_ARP_FREE) {
+            continue;
+        }
+        ss << *(it.get()) << "\n\n";
+    }
+    ss << "-----------------------";
+    TINYTCP_LOG_DEBUG(g_logger) << ss.str();
+}
+
+ARPEntry::ptr ARPProcessor::cache_alloc() {
+    ARPEntry::ptr arp_entry = std::make_shared<ARPEntry>();
+    arp_entry->m_state = ARPEntry::NET_ARP_FREE;
+    if (m_cache_list.size() >= g_arp_cache_size->value()) {
+        auto back = m_cache_list.back();
+        back->clear_buf();
+        m_cache_list.pop_back();
+    }
+    m_cache_list.push_front(arp_entry);
+    return arp_entry;
+}
+
+
+void ARPProcessor::release_cache(ARPEntry* arp_entry) {
+    for (auto it = m_cache_list.begin(); it != m_cache_list.end(); ++it) {
+        if ((*it).get() == arp_entry) {
+            (*it)->clear_buf();
+            m_cache_list.erase(it);
+        }
+    }
+}
+
+ARPProcessor::CacheIterator ARPProcessor::cache_find(const ipaddr_t& ipaddr) {
+    for (auto it = m_cache_list.begin(); it != m_cache_list.end(); ++it) {
+        if (*((uint32_t*)(*it)->m_ipaddr) == ipaddr.q_addr) {
+            return it;
+        }
+    }
+    return m_cache_list.end();
+}
+
+net_err_t ARPProcessor::cache_insert(EtherNet* netif, const ipaddr_t& ipaddr, uint8_t* hwaddr) {
+    CacheIterator arp_it = cache_find(ipaddr);
+    if (arp_it == m_cache_list.end()) {
+        auto arp_entry = cache_alloc();
+        arp_entry->m_netif = netif;
+        memcpy(arp_entry->m_ipaddr, ipaddr.a_addr, IPV4_ADDR_SIZE);
+        memcpy(arp_entry->m_hwaddr, hwaddr, ETHER_HWA_SIZE);
+        arp_entry->m_state = ARPEntry::NET_ARP_RESOLVED;
+    }
+    else {
+        TINYTCP_LOG_DEBUG(g_logger) << "update arp cache";
+        auto arp_entry = *arp_it;
+        arp_entry->m_netif = netif;
+        memcpy(arp_entry->m_ipaddr, ipaddr.a_addr, IPV4_ADDR_SIZE);
+        memcpy(arp_entry->m_hwaddr, hwaddr, ETHER_HWA_SIZE);
+        arp_entry->m_state = ARPEntry::NET_ARP_RESOLVED;
+        if (arp_it != m_cache_list.begin()) {
+            m_cache_list.erase(arp_it);
+            m_cache_list.push_front(arp_entry);
+        }
+        // 如果有缓存的数据包，这时有mac地址来了，就直接全部发送
+        net_err_t err = arp_entry->cache_send_all();
+        if ((int8_t)err < 0) {
+            TINYTCP_LOG_ERROR(g_logger) << "send packet error";
+            return err;
+        }
+    }
+
+    debug_print();
+    return net_err_t::NET_ERR_OK;
+}
+
+std::ostream& operator<<(std::ostream& os, const arp_pkt_t& arp_pkt) {
+    os  << "htype=        "   << std::hex << (uint32_t)net_to_host(arp_pkt.htype) << std::dec
+        << "\niptype=       " << (uint32_t)net_to_host(arp_pkt.iptype)
+        << "\nhwlen=        " << (uint32_t)(arp_pkt.hwlen)
+        << "\niplen=        " << (uint32_t)(arp_pkt.iplen)
+        << "\nopcode=       " << (uint32_t)net_to_host(arp_pkt.opcode)
+        << "\nsender_hwaddr=" << std::make_pair(std::string((char*)arp_pkt.sender_hwaddr, ETHER_HWA_SIZE), true)
+        << "\nsender_ipaddr=" << ipaddr_t(*((uint32_t*)arp_pkt.sender_ipaddr))
+        << "\ntarget_hwaddr=" << std::make_pair(std::string((char*)arp_pkt.target_hwaddr, ETHER_HWA_SIZE), true)
+        << "\ntarget_ipaddr=" << ipaddr_t(*((uint32_t*)arp_pkt.target_ipaddr));
+
+    return os;
+}
+
+std::ostream& operator<<(std::ostream& os, const ARPEntry& arp_entry) {
+    os  << "ip=" << ipaddr_t(*(uint32_t*)arp_entry.m_ipaddr)
+        << "\nmac=" << std::make_pair(std::string((char*)arp_entry.m_hwaddr, ETHER_HWA_SIZE), true)
+        << "\nstate=" << magic_enum::enum_name(arp_entry.m_state)
+        << "\ntimeout=" << arp_entry.m_timeout
+        << "\nretry_cnt=" << arp_entry.m_retry_cnt
+        << "\nbuf_size=" << arp_entry.m_buf_list.size();
+
+    return os;
 }
 
 } // namespace tinytcp

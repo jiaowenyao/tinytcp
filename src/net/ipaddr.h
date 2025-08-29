@@ -20,6 +20,7 @@ struct ipaddr_t {
     };
 
     ipaddr_t() : type(IPADDR_V4), q_addr(0) {}
+    ipaddr_t(uint32_t addr) : type(IPADDR_V4), q_addr(addr) {}
     ipaddr_t(const char* str);
 
     const ipaddr_t operator=(const ipaddr_t& other) {
