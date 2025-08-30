@@ -298,7 +298,10 @@ bool _eth0_net_registered = INetWork::register_netif_factory("eth0",
         return std::make_unique<EtherNet>(network, name, ops_data);
     });
 
-
+bool _veth0_net_registered = INetWork::register_netif_factory("veth0",
+    [](INetWork* network, const char* name, void* ops_data) -> std::unique_ptr<INetIF> {
+        return std::make_unique<EtherNet>(network, name, ops_data);
+    });
 };
 
 

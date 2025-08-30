@@ -2,10 +2,11 @@
 #include "net_err.h"
 #include "exmsg.h"
 #include "memblock.h"
+#include "src/timer.h"
 
 namespace tinytcp {
 
-class IProtocolStack {
+class IProtocolStack : public TimerManager {
 
 public:
     IProtocolStack() = default;

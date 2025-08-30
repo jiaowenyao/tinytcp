@@ -8,14 +8,13 @@
 #include "memblock.h"
 #include "src/thread.h"
 #include "src/lock_free_ring_queue.h"
-#include "src/timer.h"
 #include <sys/epoll.h>
 #include <sys/eventfd.h>
 
 
 namespace tinytcp {
 
-class ProtocolStack : public IProtocolStack, public TimerManager {
+class ProtocolStack : public IProtocolStack {
 
 public:
     ProtocolStack();

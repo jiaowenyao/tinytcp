@@ -112,6 +112,10 @@ public:
 
     void debug_print();
 
+    // 根据网卡判断广播地址
+    bool is_local_broadcast(const ipaddr_t& ipaddr);
+    bool is_direct_broadcast(const ipaddr_t& ipaddr);
+
 public:
     // 网卡属性初始化
     virtual net_err_t open() { return net_err_t::NET_ERR_OK; }
@@ -176,6 +180,8 @@ public:
     net_err_t make_arp_request(const ipaddr_t& dest);
     net_err_t make_arp_response(PktBuffer::ptr buf);
     net_err_t arp_in(PktBuffer::ptr buf);
+    net_err_t arp_resolve(const ipaddr_t& ipaddr, PktBuffer::ptr buf);
+
 private:
     ARPProcessor m_arp_processor;
 };

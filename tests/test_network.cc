@@ -47,12 +47,10 @@ int main() {
         .hwaddr = hwaddr
     };
     auto eth0 = network->netif_open("eth0", &pcap_data);
+    eth0->set_netmask("255.255.240.0");
 
     network->debug_print();
 
-    tinytcp::PktBuffer::ptr buf = pktmgr->get_pktbuffer();
-    buf->alloc(32);
-    buf->fill(0x53, 32);
     // eth0->netif_out(tinytcp::ipaddr_t(), buf);
     // netif->netif_out(tinytcp::ipaddr_t(), buf);
 
@@ -60,8 +58,14 @@ int main() {
     // p.add_timer(3000, print2, true);
 
     while (1) {
-        eth0->netif_out("192.168.200.1", buf);
-        return 0;
+        tinytcp::PktBuffer::ptr buf = pktmgr->get_pktbuffer();
+        buf->alloc(32);
+        buf->fill(0x53, 32);
+        // eth0->netif_out("192.168.160.255", buf);
+        eth0->netif_out("192.168.175.255", buf);
+        // eth0->netif_out("172.20.32.132", buf);
+        ((tinytcp::EtherNet*)eth0)->make_arp_request("192.168.160.1");
+        // return 0;
         sleep(1);
         // std::this_thread::yield();
         // sleep(10);

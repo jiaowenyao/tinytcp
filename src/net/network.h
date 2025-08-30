@@ -44,6 +44,8 @@ public:
     PktBuffer::ptr get_buf_from_out_queue(NetListIt netif_it, int timeout_ms = -1);
     net_err_t put_buf_to_out_queue(NetListIt netif_it, PktBuffer::ptr buf, int timeout_ms = -1);
 
+    IProtocolStack* get_protocal_stack() const noexcept { return m_protocal_stack; }
+
     void debug_print();
 
 protected:

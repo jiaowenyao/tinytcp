@@ -3,6 +3,7 @@
 #include "ipaddr.h"
 #include "link_layer.h"
 #include "pktbuf.h"
+#include <optional>
 
 
 namespace tinytcp {
@@ -50,8 +51,8 @@ public:
     net_err_t cache_send_all();
 
 private:
-    uint8_t m_ipaddr[IPV4_ADDR_SIZE];
-    uint8_t m_hwaddr[ETHER_HWA_SIZE];
+    uint8_t m_ipaddr[IPV4_ADDR_SIZE] = {0};
+    uint8_t m_hwaddr[ETHER_HWA_SIZE] = {0};
     arp_state m_state;
 
     int m_timeout = 0;
@@ -76,9 +77,16 @@ public:
 
     ARPEntry::ptr cache_alloc();
     void release_cache(ARPEntry* arp_entry);
-    CacheIterator cache_find(const ipaddr_t& ipaddr);
+    std::optional<CacheIterator> cache_find(const ipaddr_t& ipaddr);
+    const uint8_t* arp_find(EtherNet* netif, const ipaddr_t& ipaddr); // 查找ip地址对应的mac地址，可以用于解析广播地址
     net_err_t cache_insert(EtherNet* netif, const ipaddr_t& ipaddr, uint8_t* hwaddr);
+    net_err_t arp_resolve(EtherNet* netif, const ipaddr_t& ipaddr, PktBuffer::ptr buf);
 
+    uint32_t get_cache_timeout() const noexcept;
+    void cache_timer();
+
+    // 网卡关闭时关闭相关的缓存
+    void clear(EtherNet* netif);
 private:
     std::list<ARPEntry::ptr> m_cache_list;
 };

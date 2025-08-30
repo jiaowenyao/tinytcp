@@ -48,6 +48,15 @@ INetIF::~INetIF() {
 
 }
 
+bool INetIF::is_local_broadcast(const ipaddr_t& ipaddr) {
+    return ipaddr.q_addr == 0xFFFFFFFF;
+}
+
+bool INetIF::is_direct_broadcast(const ipaddr_t& ipaddr) {
+    uint32_t host_ip = ipaddr.q_addr & (~m_netmask.q_addr);
+    return host_ip == (0xFFFFFFFF & (~m_netmask.q_addr));
+}
+
 net_err_t INetIF::close() { return net_err_t::NET_ERR_OK; }
 
 #if defined(DEBUG_INETIF)
@@ -226,6 +235,8 @@ net_err_t LoopNet::send() {
 EtherNet::EtherNet(INetWork* network, const char* name, void* ops_data)
     : INetIF(network, name, ops_data) {
 
+    // 启动arp定时器
+    auto p = network->get_protocal_stack()->add_timer(m_arp_processor.get_cache_timeout(), std::bind(&ARPProcessor::cache_timer, &m_arp_processor), true);
 }
 
 EtherNet::~EtherNet() {
@@ -296,6 +307,7 @@ net_err_t EtherNet::link_open() {
 
 void EtherNet::link_close() {
 
+    m_arp_processor.clear(this);
 }
 
 net_err_t EtherNet::arp_in(PktBuffer::ptr buf) {
@@ -312,8 +324,18 @@ net_err_t EtherNet::arp_in(PktBuffer::ptr buf) {
         return net_err_t::NET_ERR_NONE;
     }
 
-    if (net_to_host(arp_packet->opcode) == ARP_REQUEST) {
-        return make_arp_response(buf);
+    ipaddr_t target_ipaddr(*(uint32_t*)arp_packet->target_ipaddr);
+    if (m_ipaddr == target_ipaddr) {
+        TINYTCP_LOG_DEBUG(g_logger) << "recieve an arp for me";
+        m_arp_processor.cache_insert(this, *(uint32_t*)arp_packet->sender_ipaddr, arp_packet->sender_hwaddr);
+
+        if (net_to_host(arp_packet->opcode) == ARP_REQUEST) {
+            return make_arp_response(buf);
+        }
+    }
+    else {
+        TINYTCP_LOG_DEBUG(g_logger) << "recieve an arp, not for me";
+
     }
 
     return net_err_t::NET_ERR_OK;
@@ -359,10 +381,23 @@ net_err_t EtherNet::link_out(const ipaddr_t& ip, PktBuffer::ptr buf) {
         return err;
     }
 
-    return make_arp_request(ip);
+    const uint8_t* hwaddr = m_arp_processor.arp_find(this, ip);
+    if (hwaddr != nullptr) {
+        return ether_raw_out(NET_PROTOCOL_ARP, hwaddr, buf);
+    }
+    else {
+        return arp_resolve(ip, buf);
+    }
+
+    return net_err_t::NET_ERR_OK;
+}
+
+net_err_t EtherNet::arp_resolve(const ipaddr_t& ipaddr, PktBuffer::ptr buf) {
+    return m_arp_processor.arp_resolve(this, ipaddr, buf);
 }
 
 net_err_t EtherNet::make_arp_request(const ipaddr_t& dest) {
+    TINYTCP_LOG_DEBUG(g_logger) << "make arp request";
     PktBuffer::ptr buf = m_arp_processor.make_request(this, dest);
     if (buf == nullptr) {
         TINYTCP_LOG_WARN(g_logger) << "make_arp_request error";
