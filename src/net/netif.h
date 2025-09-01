@@ -156,6 +156,8 @@ public:
     net_err_t close() override;
     net_err_t send() override;
 
+    net_err_t link_in(PktBuffer::ptr buf) override;
+
 private:
 
 };

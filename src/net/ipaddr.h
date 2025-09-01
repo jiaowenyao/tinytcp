@@ -42,7 +42,14 @@ struct ipaddr_t {
 
 };
 
+bool is_local_broadcast(const ipaddr_t& ipaddr);
+bool is_direct_broadcast(const ipaddr_t& ipaddr, const ipaddr_t& netmask);
+bool operator==(const ipaddr_t& a, const ipaddr_t& b);
+ipaddr_t ipaddr_get_net(const ipaddr_t& ipaddr, const ipaddr_t& netmask);
+
 std::ostream& operator<<(std::ostream& os, const ipaddr_t& ipaddr);
+
+bool ipaddr_is_match(const ipaddr_t& dest_ip, const ipaddr_t& netif_ip, const ipaddr_t& netif_netmask);
 
 } // namespace tinytcp
 

@@ -8,6 +8,7 @@
 #include "protocol.h"
 #include "plat/sys_plat.h"
 #include "src/endiantool.h"
+#include "ip.h"
 #include <iomanip>
 
 
@@ -214,6 +215,15 @@ net_err_t LoopNet::open() {
     return net_err_t::NET_ERR_OK;
 }
 
+net_err_t LoopNet::link_in(PktBuffer::ptr buf) {
+    auto ipprotocol = m_network->get_protocal_stack()->get_ipprotocol();
+    net_err_t err = ipprotocol->ipv4_in(this, buf);
+    if ((int8_t)err < 0) {
+        TINYTCP_LOG_ERROR(g_logger) << "LoopNet::link_in->ipv4_in error";
+    }
+    return err;
+}
+
 net_err_t LoopNet::close() {
     INetIF::close();
     return net_err_t::NET_ERR_OK;
@@ -360,7 +370,9 @@ net_err_t EtherNet::link_in(PktBuffer::ptr buf) {
         }
         case NET_PROTOCOL_IPv4: {
             TINYTCP_LOG_DEBUG(g_logger) << "get ipv4 pkt";
-            break;
+            buf->remove_header(sizeof(ether_hdr_t));
+            auto ipprotocol = m_network->get_protocal_stack()->get_ipprotocol();
+            return ipprotocol->ipv4_in(this, buf);
         }
         default: {
             TINYTCP_LOG_DEBUG(g_logger) << "get other";

@@ -6,6 +6,7 @@
 #include "network.h"
 #include "protocol_stack.h"
 #include "memblock.h"
+#include "ip.h"
 #include "src/thread.h"
 #include "src/lock_free_ring_queue.h"
 #include <sys/epoll.h>
@@ -22,8 +23,6 @@ public:
     net_err_t init()  override;
     net_err_t start() override;
 
-    INetWork* get_network() const noexcept { return m_network.get(); }
-
     void work_thread_func();
     net_err_t do_netif_in(exmsg_t* msg);
 
@@ -31,7 +30,6 @@ public:
 
 // 协议栈工作线程相关
 private:
-    INetWork::uptr m_network;
     Thread::uptr m_work_thread;
 
 // 定时器相关
