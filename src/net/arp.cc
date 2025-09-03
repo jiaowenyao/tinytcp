@@ -3,6 +3,8 @@
 #include "endiantool.h"
 #include "protocol.h"
 #include "netif.h"
+#include "ip.h"
+#include "icmp.h"
 #include "src/magic_enum.h"
 #include "src/config.h"
 
@@ -146,7 +148,7 @@ uint32_t ARPProcessor::get_cache_timeout() const noexcept {
 
 void ARPProcessor::cache_timer() {
     uint32_t cache_timeout = g_arp_cache_timeout->value();
-    TINYTCP_LOG_DEBUG(g_logger) << "cache_timer trigger";
+    // TINYTCP_LOG_DEBUG(g_logger) << "cache_timer trigger";
     for (auto it = m_cache_list.begin(); it != m_cache_list.end();) {
         auto cache = *it;
         cache->m_timeout -= cache_timeout;
@@ -188,6 +190,23 @@ void ARPProcessor::cache_timer() {
             ++it;
         }
     }
+}
+
+void ARPProcessor::update_from_ipbuf(EtherNet* netif, PktBuffer::ptr buf) {
+    net_err_t err = buf->set_cont_header(sizeof(ipv4_hdr_t) + sizeof(ether_hdr_t));
+    if (int8_t(err) < 0) {
+        TINYTCP_LOG_ERROR(g_logger) << "update from ipbuf, set cont header error";
+        return;
+    }
+
+    ether_hdr_t* eth_hdr = (ether_hdr_t*)buf->get_data();
+    ipv4_hdr_t* ipv4_hdr = (ipv4_hdr_t*)((uint8_t*)eth_hdr + sizeof(ether_hdr_t));
+    if (ipv4_hdr->version != NET_VERSION_IPV4) {
+        TINYTCP_LOG_WARN(g_logger) << "not ipv4";
+        return;
+    }
+
+    cache_insert(netif, ipaddr_t(ipv4_hdr->src_ip), eth_hdr->src);
 }
 
 void ARPProcessor::debug_print() {

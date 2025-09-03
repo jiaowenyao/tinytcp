@@ -483,6 +483,28 @@ net_err_t PktBuffer::read(uint8_t* dest, uint32_t size) {
     return net_err_t::NET_ERR_OK;
 }
 
+uint16_t PktBuffer::buf_checksum16(uint32_t size, uint32_t pre_sum, bool complement) {
+    uint32_t remain_size = total_blk_remain();
+    if (remain_size < size) {
+        TINYTCP_LOG_WARN(g_logger) << "size too big";
+        return 0;
+    }
+
+    uint32_t sum = pre_sum;
+    while (size > 0) {
+        uint32_t blk_size = cur_blk_remain_size();
+        uint32_t curr_size = std::min(size, blk_size);
+        sum = checksum16(m_blk_offset, curr_size, sum, 0);
+        move_forward(curr_size);
+        size -= curr_size;
+    }
+
+    if (complement) {
+        return (uint16_t)~sum;
+    }
+    return (uint16_t)sum;
+}
+
 void PktBuffer::debug_print() {
 
     uint64_t total_size = 0;

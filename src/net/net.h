@@ -3,12 +3,11 @@
 
 #include "net_err.h"
 #include "exmsg.h"
-#include "network.h"
 #include "protocol_stack.h"
 #include "memblock.h"
-#include "ip.h"
 #include "src/thread.h"
 #include "src/lock_free_ring_queue.h"
+#include "src/singleton.h"
 #include <sys/epoll.h>
 #include <sys/eventfd.h>
 
@@ -47,6 +46,8 @@ private:
     LockFreeRingQueue<exmsg_t*>::uptr m_timer_msg_queue = nullptr;
 
 };
+
+using ProtocolStackMgr = Singleton<ProtocolStack>;
 
 
 } // namespace tinytcp

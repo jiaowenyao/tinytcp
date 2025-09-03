@@ -5,6 +5,9 @@
 #include "src/macro.h"
 #include "src/log.h"
 #include "magic_enum.h"
+#include "network.h"
+#include "ip.h"
+#include "icmp.h"
 #include <fcntl.h>
 
 
@@ -23,8 +26,12 @@ ProtocolStack::ProtocolStack() {
     TINYTCP_ASSERT2(m_mem_block != nullptr, "m_mem_block init error");
     m_msg_queue = std::make_unique<LockFreeRingQueue<exmsg_t*>>(g_tcp_msg_queue_size->value());
     TINYTCP_ASSERT2(m_msg_queue != nullptr, "m_msg_queue init error");
-    m_network = std::make_unique<PcapNetWork>(this);
+    m_network = std::make_unique<PcapNetWork>();
     TINYTCP_ASSERT2(m_network != nullptr, "m_network init error");
+    m_ipprotocol = std::make_unique<IPProtocol>();
+    TINYTCP_ASSERT2(m_ipprotocol != nullptr, "m_ipprotocol init error");
+    m_icmpprotocol = std::make_unique<ICMPProtocol>();
+    TINYTCP_ASSERT2(m_icmpprotocol != nullptr, "m_icmpprotocol init error");
 
     // 启动工作线程
     m_work_thread = std::make_unique<Thread>(std::bind(&ProtocolStack::work_thread_func, this), "work_thread");
@@ -51,9 +58,9 @@ void ProtocolStack::work_thread_func() {
             continue;
         }
 
-        TINYTCP_LOG_DEBUG(g_logger)
-            << "work thread recv msg=" << (uint64_t)msg
-            << " msg_type=" << magic_enum::enum_name(msg->type);
+        // TINYTCP_LOG_DEBUG(g_logger)
+        //     << "work thread recv msg=" << (uint64_t)msg
+        //     << " msg_type=" << magic_enum::enum_name(msg->type);
 
         switch (msg->type) {
             case exmsg_t::NET_EXMSG_NETIF_IN: {

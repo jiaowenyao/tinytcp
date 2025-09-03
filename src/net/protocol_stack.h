@@ -3,17 +3,17 @@
 #include "exmsg.h"
 #include "memblock.h"
 #include "src/timer.h"
+#include "network.h"
+#include "ip.h"
+#include "icmp.h"
 
 namespace tinytcp {
-
-class INetWork;
-class IPProtocol;
 
 class IProtocolStack : public TimerManager {
 
 public:
     IProtocolStack() = default;
-    virtual ~IProtocolStack() = default;
+    virtual ~IProtocolStack() {};
     virtual net_err_t init()  = 0;
     virtual net_err_t start() = 0;
 
@@ -27,11 +27,13 @@ public:
 
     INetWork* get_network() const noexcept { return m_network.get(); }
     IPProtocol* get_ipprotocol() const noexcept { return m_ipprotocol.get(); }
+    ICMPProtocol* get_icmpprotocol() const noexcept { return m_icmpprotocol.get(); }
 protected:
     MemBlock::uptr m_mem_block = nullptr;
     LockFreeRingQueue<exmsg_t*>::uptr m_msg_queue = nullptr;
     std::unique_ptr<INetWork> m_network;
     std::unique_ptr<IPProtocol> m_ipprotocol;
+    std::unique_ptr<ICMPProtocol> m_icmpprotocol;
 };
 
 } // namespace tinytcp

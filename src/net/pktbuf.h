@@ -82,6 +82,7 @@ public:
     // 移动包到下一个位置,如果跨越包,指向开头
     void move_forward(uint32_t size);
 
+    uint16_t buf_checksum16(uint32_t len, uint32_t pre_sum, bool complement);
 
     // 调试打印
     void debug_print();

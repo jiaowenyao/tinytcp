@@ -8,7 +8,7 @@
 #include "protocol.h"
 #include "plat/sys_plat.h"
 #include "src/endiantool.h"
-#include "ip.h"
+#include "net.h"
 #include <iomanip>
 
 
@@ -143,7 +143,9 @@ PktBuffer::ptr INetIF::get_buf_from_in_queue(int timeout_ms) {
 net_err_t INetIF::put_buf_to_in_queue(PktBuffer::ptr buf, int timeout_ms) {
     bool ok = m_in_q->push(buf, timeout_ms);
     if (ok) {
-        m_network->exmsg_netif_in(this);
+        if (m_in_q->size() == 1) {
+            m_network->exmsg_netif_in(this);
+        }
         return net_err_t::NET_ERR_OK;
     }
     return net_err_t::NET_ERR_FULL;
@@ -216,7 +218,7 @@ net_err_t LoopNet::open() {
 }
 
 net_err_t LoopNet::link_in(PktBuffer::ptr buf) {
-    auto ipprotocol = m_network->get_protocal_stack()->get_ipprotocol();
+    auto ipprotocol = ProtocolStackMgr::get_instance()->get_ipprotocol();
     net_err_t err = ipprotocol->ipv4_in(this, buf);
     if ((int8_t)err < 0) {
         TINYTCP_LOG_ERROR(g_logger) << "LoopNet::link_in->ipv4_in error";
@@ -246,7 +248,7 @@ EtherNet::EtherNet(INetWork* network, const char* name, void* ops_data)
     : INetIF(network, name, ops_data) {
 
     // 启动arp定时器
-    auto p = network->get_protocal_stack()->add_timer(m_arp_processor.get_cache_timeout(), std::bind(&ARPProcessor::cache_timer, &m_arp_processor), true);
+    auto p = ProtocolStackMgr::get_instance()->add_timer(m_arp_processor.get_cache_timeout(), std::bind(&ARPProcessor::cache_timer, &m_arp_processor), true);
 }
 
 EtherNet::~EtherNet() {
@@ -369,9 +371,12 @@ net_err_t EtherNet::link_in(PktBuffer::ptr buf) {
             break;
         }
         case NET_PROTOCOL_IPv4: {
+            auto protocol_stack = ProtocolStackMgr::get_instance();
+            // 从ip包中提取mac地址更新arp缓存
+            // m_arp_processor.update_from_ipbuf(this, buf);
             TINYTCP_LOG_DEBUG(g_logger) << "get ipv4 pkt";
             buf->remove_header(sizeof(ether_hdr_t));
-            auto ipprotocol = m_network->get_protocal_stack()->get_ipprotocol();
+            auto ipprotocol = protocol_stack->get_ipprotocol();
             return ipprotocol->ipv4_in(this, buf);
         }
         default: {
@@ -385,7 +390,7 @@ net_err_t EtherNet::link_in(PktBuffer::ptr buf) {
 
 net_err_t EtherNet::link_out(const ipaddr_t& ip, PktBuffer::ptr buf) {
     if (m_ipaddr == ip) {
-        net_err_t err = ether_raw_out(NET_PROTOCOL_ARP, ether_broadcast_addr(), buf);
+        net_err_t err = ether_raw_out(NET_PROTOCOL_IPv4, ether_broadcast_addr(), buf);
         if ((int8_t)err < 0) {
             TINYTCP_LOG_ERROR(g_logger) << "ether_row_out error: " << magic_enum::enum_name(err);
             // buf->free();
@@ -395,7 +400,7 @@ net_err_t EtherNet::link_out(const ipaddr_t& ip, PktBuffer::ptr buf) {
 
     const uint8_t* hwaddr = m_arp_processor.arp_find(this, ip);
     if (hwaddr != nullptr) {
-        return ether_raw_out(NET_PROTOCOL_ARP, hwaddr, buf);
+        return ether_raw_out(NET_PROTOCOL_IPv4, hwaddr, buf);
     }
     else {
         return arp_resolve(ip, buf);
@@ -444,6 +449,7 @@ net_err_t EtherNet::ether_raw_out(uint16_t protocol, const uint8_t* dest, PktBuf
     }
 
     net_err_t err = buf->alloc_header(sizeof(ether_hdr_t));
+    buf->reset_access();
     if ((int8_t)err < 0) {
         TINYTCP_LOG_WARN(g_logger) << "alloc header error: " << magic_enum::enum_name(err);
         return err;

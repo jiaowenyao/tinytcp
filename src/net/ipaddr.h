@@ -6,7 +6,9 @@
 
 namespace tinytcp {
 
-#define IPV4_ADDR_SIZE  4
+#define IPV4_ADDR_SIZE           4
+#define NET_VERSION_IPV4         4
+#define NET_IP_DEFAULT_TTL       64
 
 struct ipaddr_t {
 

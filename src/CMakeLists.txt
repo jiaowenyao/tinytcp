@@ -23,6 +23,7 @@ set(LIB_SRC
     net/link_layer.cc
     net/arp.cc
     net/ip.cc
+    net/icmp.cc
 )
 
 add_library(tinytcp SHARED ${LIB_SRC})

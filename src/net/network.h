@@ -16,7 +16,7 @@ public:
     using ptr  = std::shared_ptr<INetWork>;
     using uptr = std::unique_ptr<INetWork>;
 
-    explicit INetWork(IProtocolStack* protocal_stack);
+    INetWork();
     virtual ~INetWork();
     virtual net_err_t init() = 0;
     virtual net_err_t start() = 0;
@@ -38,18 +38,19 @@ public:
     net_err_t set_deactive(INetIF* netif);
 
     void set_default(INetIF* netif) noexcept { m_default_netif = netif; }
+    INetIF* get_default() const noexcept { return m_default_netif; }
 
     PktBuffer::ptr get_buf_from_in_queue(NetListIt netif_it, int timeout_ms = -1);
     net_err_t put_buf_to_in_queue(NetListIt netif_it, PktBuffer::ptr buf, int timeout_ms = -1);
     PktBuffer::ptr get_buf_from_out_queue(NetListIt netif_it, int timeout_ms = -1);
     net_err_t put_buf_to_out_queue(NetListIt netif_it, PktBuffer::ptr buf, int timeout_ms = -1);
 
-    IProtocolStack* get_protocal_stack() const noexcept { return m_protocal_stack; }
+    // IProtocolStack* get_protocal_stack() const noexcept { return m_protocal_stack; }
 
     void debug_print();
 
 protected:
-    IProtocolStack* m_protocal_stack = nullptr;
+    // IProtocolStack* m_protocal_stack = nullptr;
     std::list<INetIF*> m_netif_list;      // 网络接口列表
     INetIF* m_default_netif = nullptr;    // 默认使用的网络接口
 
@@ -67,7 +68,7 @@ public:
     using ptr  = std::shared_ptr<PcapNetWork>;
     using uptr = std::unique_ptr<PcapNetWork>;
 
-    explicit PcapNetWork(IProtocolStack* protocal_stack);
+    PcapNetWork();
     ~PcapNetWork() = default;
     net_err_t init() override;
     net_err_t start() override;

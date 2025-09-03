@@ -9,7 +9,6 @@ namespace tinytcp {
 
 class INetIF;
 
-#define NET_VERSION_IPV4    4
 
 #pragma pack(1)
 
@@ -36,10 +35,11 @@ struct ipv4_hdr_t {
     uint8_t ttl;
     uint8_t protocol;
     uint16_t hdr_checksum;
-    uint8_t src_ip[IPV4_ADDR_SIZE];
-    uint8_t dest_ip[IPV4_ADDR_SIZE];
+    uint32_t src_ip;
+    uint32_t dest_ip;
 
     void hdr_net_to_host();
+    void hdr_host_to_net();
     uint32_t get_header_size();
 };
 

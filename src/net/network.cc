@@ -1,6 +1,7 @@
 
 #include "network.h"
 #include "src/log.h"
+#include "net.h"
 #include "macro.h"
 #include "plat/sys_plat.h"
 
@@ -10,10 +11,7 @@ std::map<std::string, INetWork::NetIFFactoryFunc> INetWork::s_netif_factory_regi
 
 static tinytcp::Logger::ptr g_logger = TINYTCP_LOG_NAME("system");
 
-INetWork::INetWork(IProtocolStack* protocal_stack)
-    : m_protocal_stack(protocal_stack) {
-
-}
+INetWork::INetWork() {}
 
 INetWork::~INetWork() {
     for (auto& it : m_netif_list) {
@@ -45,7 +43,8 @@ std::list<INetIF*>::iterator INetWork::find_netif_by_name(const std::string& nam
 
 net_err_t INetWork::exmsg_netif_in(INetIF* netif) {
     TINYTCP_LOG_DEBUG(g_logger) << "exmsg netif in";
-    exmsg_t* msg = m_protocal_stack->get_msg_block();
+    auto protocol_statck = ProtocolStackMgr::get_instance();
+    exmsg_t* msg = protocol_statck->get_msg_block();
     if (msg == nullptr) {
         TINYTCP_LOG_WARN(g_logger) << "no free msg block";
         return net_err_t::NET_ERR_MEM;
@@ -59,7 +58,7 @@ net_err_t INetWork::exmsg_netif_in(INetIF* netif) {
     net_err_t err = msg_send(msg, 0);
     if ((int)err < 0) {
         TINYTCP_LOG_WARN(g_logger) << "msg_send error, msg_queue is full";
-        m_protocal_stack->release_msg_block(msg);
+        protocol_statck->release_msg_block(msg);
         return err;
     }
     return net_err_t::NET_ERR_OK;
@@ -120,7 +119,7 @@ INetIF* INetWork::netif_open(const char* dev_name, void* ops_data) {
 }
 
 net_err_t INetWork::msg_send(exmsg_t* msg, int32_t timeout_ms) {
-    m_protocal_stack->push_msg(msg, timeout_ms);
+    ProtocolStackMgr::get_instance()->push_msg(msg, timeout_ms);
 
     return net_err_t::NET_ERR_OK;
 }
@@ -185,10 +184,7 @@ net_err_t INetWork::put_buf_to_out_queue(NetListIt netif_it, PktBuffer::ptr buf,
     return net_err_t::NET_ERR_OK;
 }
 
-PcapNetWork::PcapNetWork(IProtocolStack* protocal_stack)
-    : INetWork(protocal_stack) {
-
-}
+PcapNetWork::PcapNetWork() {}
 
 net_err_t PcapNetWork::init()  {
 
@@ -272,11 +268,15 @@ void PcapNetWork::send_func(void* arg) {
         buf->read(rw_buffer, total_size);
         // buf->free();
 
+        // uint8_t tmp1 = rw_buffer[16], tmp2 = rw_buffer[17];
+        // rw_buffer[16] = tmp2;
+        // rw_buffer[17] = tmp1;
+        TINYTCP_LOG_DEBUG(g_logger) << "pcap_inject send successfully, data=" << std::make_pair(std::string((const char*)rw_buffer, total_size), true);
         if (pcap_inject(pcap, rw_buffer, total_size) == -1) {
             TINYTCP_LOG_ERROR(g_logger) << "pcap_inject error: " << pcap_geterr(pcap) << ", send size=" << total_size;
         }
         else {
-            TINYTCP_LOG_DEBUG(g_logger) << "pcap_inject send successfully, data=" << std::make_pair(std::string((const char*)rw_buffer, total_size), true);
+            // TINYTCP_LOG_DEBUG(g_logger) << "pcap_inject send successfully, data=" << std::make_pair(std::string((const char*)rw_buffer, total_size), true);
         }
     }
 }
