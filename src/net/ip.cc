@@ -164,6 +164,7 @@ net_err_t IPProtocol::ip_normal_in(INetIF* netif, PktBuffer::ptr buf, const ipad
             break;
         }
         case NET_PROTOCOL_UDP: {
+            net_err_t err = ProtocolStackMgr::get_instance()->get_icmpprotocol()->icmpv4_out_unreach(src_ip, netif->get_ipaddr(), ICMPv4_UNREACH_PORT, buf);
             break;
         }
         case NET_PROTOCOL_TCP: {

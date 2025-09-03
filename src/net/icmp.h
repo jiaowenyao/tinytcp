@@ -6,9 +6,11 @@
 namespace tinytcp {
 
 #define ICMPv4_ECHO             0
+#define ICMPv4_UNREACH_PORT     3
 
 #define ICMPv4_ECHO_REQUEST     8
 #define ICMPv4_ECHO_REPLY       0
+#define ICMPv4_UNREACH          3
 
 #pragma pack(1)
 struct icmpv4_hdr_t {
@@ -39,7 +41,7 @@ public:
     net_err_t icmpv4_in(const ipaddr_t& src_ip, const ipaddr_t& netif_ip, PktBuffer::ptr buf);
     net_err_t icmpv4_out(const ipaddr_t& dest_ip, const ipaddr_t& src_ip, PktBuffer::ptr buf);
     net_err_t icmpv4_echo_reply(const ipaddr_t& dest_ip, const ipaddr_t& src_ip, PktBuffer::ptr buf);
-    // net_err_t icmpv4_out_unreach()
+    net_err_t icmpv4_out_unreach(const ipaddr_t& dest_ip, const ipaddr_t& src_ip, uint8_t code, PktBuffer::ptr buf);
 };
 
 

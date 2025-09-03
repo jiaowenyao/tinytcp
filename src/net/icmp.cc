@@ -92,6 +92,38 @@ net_err_t ICMPProtocol::icmpv4_echo_reply(const ipaddr_t& dest_ip, const ipaddr_
     return icmpv4_out(dest_ip, src_ip, buf);
 }
 
+net_err_t ICMPProtocol::icmpv4_out_unreach(const ipaddr_t& dest_ip, const ipaddr_t& src_ip, uint8_t code, PktBuffer::ptr buf) {
+    ipv4_pkt_t* ipv4_pkt = (ipv4_pkt_t*)buf->get_data();
+    uint32_t copy_size = ipv4_pkt->hdr.get_header_size() + 576;
+    if (copy_size > buf->get_capacity()) {
+        copy_size = buf->get_capacity();
+    }
+    auto pktmgr = PktMgr::get_instance();
+    PktBuffer::ptr new_buf = pktmgr->get_pktbuffer();
+    if (new_buf == nullptr) {
+        TINYTCP_LOG_WARN(g_logger) << "icmpv4_out_unreach alloc buf failed";
+        return net_err_t::NET_ERR_NONE;
+    }
+    new_buf->alloc(copy_size + sizeof(icmpv4_hdr_t) + 4);
+    icmpv4_pkt_t* pkt = (icmpv4_pkt_t*)new_buf->get_data();
+    pkt->hdr.type = ICMPv4_UNREACH;
+    pkt->hdr.code = code;
+    pkt->hdr.checksum = 0;
+    pkt->reverse = 0;
+
+    new_buf->reset_access();
+    new_buf->seek(sizeof(icmpv4_hdr_t) + 4);
+    net_err_t err = new_buf->copy(buf, copy_size);
+    if ((int8_t)err < 0) {
+        TINYTCP_LOG_ERROR(g_logger) << "icmpv4_out_unreach: copy failed";
+        return err;
+    }
+
+    err = icmpv4_out(dest_ip, src_ip, buf);
+
+    return err;
+}
+
 std::ostream& operator<<(std::ostream& os, const icmpv4_hdr_t& hdr) {
     os  << "\n"
         << "\ntype=" << (uint32_t)hdr.type
