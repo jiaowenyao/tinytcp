@@ -491,12 +491,14 @@ uint16_t PktBuffer::buf_checksum16(uint32_t size, uint32_t pre_sum, bool complem
     }
 
     uint32_t sum = pre_sum;
+    uint32_t offset = 0;
     while (size > 0) {
         uint32_t blk_size = cur_blk_remain_size();
         uint32_t curr_size = std::min(size, blk_size);
-        sum = checksum16(m_blk_offset, curr_size, sum, 0);
+        sum = checksum16(offset, m_blk_offset, curr_size, sum, 0);
         move_forward(curr_size);
         size -= curr_size;
+        offset += curr_size;
     }
 
     if (complement) {

@@ -22,7 +22,7 @@ std::string string_to_hex(const std::string& str);
 std::ostream& operator<<(std::ostream& os, const std::pair<const std::string&, bool>& p);
 
 // 16位校验和
-uint16_t checksum16(void* buf, uint16_t len, uint32_t pre_sum, int complement);
+uint16_t checksum16(uint32_t offset, void* buf, uint16_t len, uint32_t pre_sum, int complement);
 
 } // namespace tinytcp
 

@@ -143,7 +143,7 @@ bool ipv4_pkt_t::is_pkt_ok(uint16_t size, INetIF* netif) {
 
     // 校验和检查
     if (hdr.hdr_checksum) {
-        uint16_t c = checksum16(this, hdr_size, 0, 1);
+        uint16_t c = checksum16(0, this, hdr_size, 0, 1);
         if (c != 0) {
             TINYTCP_LOG_WARN(g_logger) << "bad checksum16";
             return false;
