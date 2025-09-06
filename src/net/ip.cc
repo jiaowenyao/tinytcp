@@ -16,6 +16,10 @@ static Logger::ptr g_logger = TINYTCP_LOG_NAME("system");
 static uint16_t packet_id = 0;
 static ConfigVar<uint32_t>::ptr g_ip_frag_max_nr
     = Config::look_up<uint32_t>("ip.ip_frag_max_nr", 8, "最多支持几组ip分片");
+static ConfigVar<uint32_t>::ptr g_ip_frag_scanning_cycle
+    = Config::look_up<uint32_t>("ip.ip_frag_scanning_cycle", 1000, "ip分片的计时器(ms)，检查现在的分片是否有效");
+static ConfigVar<uint32_t>::ptr g_ip_frag_timeout
+    = Config::look_up<uint32_t>("ip.ip_frag_timeout", 10000, "ip分片的存活时间(ms)");
 
 
 LockFreeRingQueue<ip_frag_t*>& IPProtocol::get_ip_frag_queue() noexcept {
@@ -36,6 +40,52 @@ namespace {
 
 void ip_frag_t::reset() noexcept {
 
+}
+
+bool ip_frag_t::frag_is_all_arrived() noexcept {
+    uint32_t offset = 0;
+    ipv4_pkt_t* pkt = nullptr;
+    for (auto& buf : buf_list) {
+        pkt = (ipv4_pkt_t*)buf->get_data();
+        uint16_t curr_offset = pkt->hdr.get_frag_start();
+        if (curr_offset != offset) {
+            return false;
+        }
+        offset += pkt->hdr.get_data_size();
+    }
+    if (pkt != nullptr) {
+        ipv4_hdr_t::frag_t _frag;
+        _frag.frag_all = net_to_host(pkt->hdr.frag.frag_all);
+        return !_frag.more;
+    }
+    return false;
+}
+
+PktBuffer::ptr ip_frag_t::frag_join() noexcept {
+    PktBuffer::ptr target = nullptr;
+    while (!buf_list.empty()) {
+        PktBuffer::ptr buf = buf_list.front();
+        buf_list.pop_front();
+        if (target == nullptr) {
+            target = buf;
+            continue;
+        }
+        ipv4_pkt_t* pkt = (ipv4_pkt_t*)buf->get_data();
+        net_err_t err = buf->remove_header(pkt->hdr.get_header_size());
+        if ((int8_t)err < 0) {
+            TINYTCP_LOG_WARN(g_logger) << "remove hdr failed!";
+            goto free_and_return;
+        }
+        err = target->merge_buf(buf);
+        if ((int8_t)err < 0) {
+            TINYTCP_LOG_WARN(g_logger) << "merge buf failed!";
+            goto free_and_return;
+        }
+    }
+    return target;
+free_and_return:
+    buf_list.clear();
+    return nullptr;
 }
 
 ip_frag_t::ptr IPProtocol::get_ip_frag() {
@@ -129,12 +179,95 @@ IPProtocol::IPProtocol() {
     ip_frag_init __ip_frag_init;
 }
 
+void IPProtocol::init() {
+    auto p = tinytcp::ProtocolStackMgr::get_instance();
+    p->add_timer(g_ip_frag_scanning_cycle->value(), std::bind(&IPProtocol::frag_timer, this), true);
+}
+
 IPProtocol::~IPProtocol() {
 
 }
 
+net_err_t IPProtocol::ip_frag_out(uint8_t protocol, INetIF* netif, const ipaddr_t& dest, const ipaddr_t& src, PktBuffer::ptr buf) {
+    TINYTCP_LOG_INFO(g_logger) << "ip_frag_out";
+    auto pktmgr = PktMgr::get_instance();
+    buf->reset_access();
+    uint16_t offset = 0;
+    uint32_t total = buf->get_capacity();
+    while (total) {
+        uint32_t curr_size = total;
+        if (curr_size + sizeof(ipv4_hdr_t) > netif->get_mtu()) {
+            curr_size = netif->get_mtu() - sizeof(ipv4_hdr_t);
+        }
+        PktBuffer::ptr dest_buf = pktmgr->get_pktbuffer();
+        if (dest_buf != nullptr) {
+            bool ok = dest_buf->alloc(curr_size + sizeof(ipv4_hdr_t));
+            if (!ok) {
+                TINYTCP_LOG_ERROR(g_logger) << "alloc buffer for frag send failed";
+                return net_err_t::NET_ERR_NONE;
+            }
+        }
+        else {
+            TINYTCP_LOG_ERROR(g_logger) << "alloc buffer for frag send failed";
+            return net_err_t::NET_ERR_NONE;
+        }
+
+        ipv4_pkt_t* pkt = (ipv4_pkt_t*)dest_buf->get_data();
+        pkt->hdr.shdr_all = 0;
+        pkt->hdr.version = NET_VERSION_IPV4;
+        pkt->hdr.shdr = sizeof(ipv4_hdr_t) / 4;
+        pkt->hdr.tos = 0;
+        pkt->hdr.total_len = (uint16_t)dest_buf->get_capacity();
+        pkt->hdr.id = packet_id;
+        pkt->hdr.ttl = NET_IP_DEFAULT_TTL;
+        pkt->hdr.protocol = protocol;
+        pkt->hdr.hdr_checksum = 0;
+        pkt->hdr.src_ip = src.q_addr;
+        pkt->hdr.dest_ip = dest.q_addr;
+
+        pkt->hdr.frag.offset = offset >> 3;
+        pkt->hdr.frag.more = total > curr_size;
+
+        dest_buf->seek(sizeof(ipv4_hdr_t));
+        net_err_t err = dest_buf->copy(buf, curr_size);
+        if ((int8_t)err < 0) {
+            TINYTCP_LOG_ERROR(g_logger) << "frag copy failed";
+            return err;
+        }
+        buf->remove_header(curr_size);
+        buf->reset_access();
+
+        pkt->hdr.hdr_host_to_net();
+        dest_buf->reset_access();
+        pkt->hdr.hdr_checksum = dest_buf->buf_checksum16(pkt->hdr.get_header_size(), 0, 1);
+
+        TINYTCP_LOG_DEBUG(g_logger) << "frag out:\n" << pkt->hdr;
+
+        err = netif->netif_out(dest, dest_buf);
+        if ((int8_t)err < 0) {
+            TINYTCP_LOG_WARN(g_logger) << "send ip packet error";
+            return err;
+        }
+
+        total -= curr_size;
+        offset += curr_size;
+    }
+    packet_id++;
+    return net_err_t::NET_ERR_OK;
+}
+
 net_err_t IPProtocol::ipv4_out(uint8_t protocol, const ipaddr_t& dest, const ipaddr_t& src, PktBuffer::ptr buf) {
     TINYTCP_LOG_DEBUG(g_logger) << "ipv4_out";
+
+    auto netif = ProtocolStackMgr::get_instance()->get_network()->get_default();
+    if (netif->get_mtu() && (buf->get_capacity() + sizeof(ipv4_hdr_t)) > netif->get_mtu()) {
+        net_err_t err = ip_frag_out(protocol, netif, dest, src, buf);
+        if ((int8_t)err < 0) {
+            TINYTCP_LOG_WARN(g_logger) << "send ip frag failed";
+            return err;
+        }
+        return net_err_t::NET_ERR_OK;
+    }
 
     net_err_t err = buf->alloc_header(sizeof(ipv4_hdr_t));
     buf->reset_access();
@@ -251,11 +384,33 @@ std::list<ip_frag_t::ptr>::iterator IPProtocol::find_frag(const ipaddr_t& ipaddr
     return m_frag_list.end();
 }
 
+void IPProtocol::frag_timer() {
+    for (auto it = m_frag_list.begin(); it != m_frag_list.end();) {
+        auto frag = *it;
+        if (--(frag->timeout) <= 0) {
+            it = m_frag_list.erase(it);
+        }
+        else {
+            ++it;
+        }
+    }
+}
+
 void IPProtocol::frag_add(ip_frag_t::ptr frag, const ipaddr_t& ip, uint16_t id) {
     frag->ip = ip;
     frag->id = id;
-    frag->timeout = 0;
+    // timeout:每次扫描就减1
+    frag->timeout = g_ip_frag_timeout->value() / g_ip_frag_scanning_cycle->value();
     m_frag_list.push_front(frag);
+}
+
+void IPProtocol::remove_frag(const ip_frag_t& frag) {
+    for (auto it = m_frag_list.begin(); it != m_frag_list.end(); ++it) {
+        if ((*it)->id == frag.id) {
+            m_frag_list.erase(it);
+            return ;
+        }
+    }
 }
 
 net_err_t IPProtocol::frag_insert(ip_frag_t::ptr frag, PktBuffer::ptr buf, ipv4_pkt_t* pkt) {
@@ -299,6 +454,23 @@ net_err_t IPProtocol::ip_frag_in(INetIF* netif, PktBuffer::ptr buf, const ipaddr
     if ((int8_t)err < 0) {
         TINYTCP_LOG_WARN(g_logger) << "frag insert error";
         return err;
+    }
+
+    if (frag->frag_is_all_arrived()) {
+        PktBuffer::ptr full_buf = frag->frag_join();
+        if (full_buf == nullptr) {
+            TINYTCP_LOG_ERROR(g_logger) << "join ip bufs failed";
+            frag_debug_print();
+            return net_err_t::NET_ERR_OK;
+        }
+        // 全部到达之后，从列表中删除
+        remove_frag(*(frag.get()));
+
+        err = ip_normal_in(netif, full_buf, src_ip, dest_ip);
+        if ((int8_t)err < 0) {
+            TINYTCP_LOG_WARN(g_logger) << "ip frag in failed";
+            return err;
+        }
     }
 
     frag_debug_print();

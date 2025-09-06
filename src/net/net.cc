@@ -40,6 +40,7 @@ ProtocolStack::ProtocolStack() {
 }
 
 net_err_t ProtocolStack::init() {
+    m_ipprotocol->init();
     return net_err_t::NET_ERR_OK;
 }
 

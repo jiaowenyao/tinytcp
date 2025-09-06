@@ -78,6 +78,8 @@ struct ip_frag_t {
     std::list<PktBuffer::ptr> buf_list;
 
     void reset() noexcept;
+    bool frag_is_all_arrived() noexcept;
+    PktBuffer::ptr frag_join() noexcept;
 };
 
 
@@ -87,6 +89,7 @@ public:
 
     IPProtocol();
     ~IPProtocol();
+    void init();
 
     net_err_t ipv4_in(INetIF* netif, PktBuffer::ptr buf);
     net_err_t ipv4_out(uint8_t protocol, const ipaddr_t& dest, const ipaddr_t& src, PktBuffer::ptr buf);
@@ -94,7 +97,9 @@ public:
     net_err_t ip_normal_in(INetIF* netif, PktBuffer::ptr buf, const ipaddr_t& src_ip, const ipaddr_t& dest_ip);
     // 重组的情况
     net_err_t ip_frag_in(INetIF* netif, PktBuffer::ptr buf, const ipaddr_t& src_ip, const ipaddr_t& dest_ip);
+    net_err_t ip_frag_out(uint8_t protocol, INetIF* netif, const ipaddr_t& dest, const ipaddr_t& src, PktBuffer::ptr buf);
     void frag_add(ip_frag_t::ptr frag, const ipaddr_t& ip, uint16_t id);
+    void remove_frag(const ip_frag_t& frag);
 
 public:
     static LockFreeRingQueue<ip_frag_t*>& get_ip_frag_queue() noexcept;
@@ -104,6 +109,7 @@ public:
     void release_ip_frag(ip_frag_t*);
     std::list<ip_frag_t::ptr>::iterator find_frag(const ipaddr_t& ipaddr, uint16_t id);
     net_err_t frag_insert(ip_frag_t::ptr frag, PktBuffer::ptr buf, ipv4_pkt_t* pkt);
+    void frag_timer();
     void frag_debug_print();
 
 private:
