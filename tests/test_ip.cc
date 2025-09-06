@@ -32,7 +32,7 @@ int main() {
     // auto eth0 = network->netif_open("eth0", &pcap_data);
     // eth0->set_netmask("255.255.240.0");
     auto eth0 = network->netif_open("eth0", &pcap_data);
-    eth0->set_netmask("255.255.0.0");
+    eth0->set_netmask("255.255.240.0");
 
     network->debug_print();
 
