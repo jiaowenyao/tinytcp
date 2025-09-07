@@ -1,0 +1,168 @@
+#include <sys/socket.h>
+#include <sys/types.h>
+#include <arpa/inet.h>
+#include <time.h>
+#include <iomanip>
+#include <cstdlib>
+#include "ping.h"
+#include "src/macro.h"
+#include "src/log.h"
+#include "src/util.h"
+#include "src/endiantool.h"
+
+static tinytcp::Logger::ptr g_logger = TINYTCP_LOG_ROOT();
+
+void ping_run(ping_t& ping, const char* dest, const PingOptions& options) {
+    static uint16_t start_id = PING_DEFAULT_ID;
+    int s = socket(AF_INET, SOCK_RAW, IPPROTO_ICMP);
+    TINYTCP_ASSERT2(s > 0, "s=" + std::to_string(s) + ", error=" + strerror(errno));
+
+    struct sockaddr_in addr;
+    memset(&addr, 0, sizeof(addr));
+    addr.sin_family = AF_INET;
+    addr.sin_addr.s_addr = inet_addr(dest);
+    addr.sin_port = 0;
+
+    int fill_size = std::min(options.packet_size, (uint32_t)PING_BUFFER_SIZE);
+    for (uint32_t i = 0; i < fill_size; ++i) {
+        ping.req.buf[i] = i;
+    }
+
+    uint32_t total_size = sizeof(icmpv4_hdr_t) + fill_size;
+    for (uint32_t i = 0, seq = 0; i < options.count; ++i, ++seq) {
+        ping.req.echo_hdr.type = 8;
+        ping.req.echo_hdr.code = 0;
+        ping.req.echo_hdr.checksum = 0;
+        ping.req.echo_hdr.id = tinytcp::host_to_net(start_id);
+        ping.req.echo_hdr.seq = seq;
+
+        ping.req.echo_hdr.checksum = tinytcp::checksum16(0, &ping.req, total_size, 0, 1);
+        int send_size = sendto(s, (const char*)&ping.req, total_size, 0, (const struct sockaddr*)&addr, sizeof(addr));
+        if (send_size < 0) {
+            TINYTCP_LOG_ERROR(g_logger) << "sendto error";
+            break;
+        }
+
+        clock_t begin_time = clock();
+        // 设置超时时间
+        struct timeval timeout;
+        timeout.tv_sec = options.timeout / 1000;
+        timeout.tv_usec = (options.timeout % 1000) * 1000;
+        fd_set readfds;
+        FD_ZERO(&readfds);
+        FD_SET(s, &readfds);
+        int select_ret = select(s + 1, &readfds, NULL, NULL, &timeout);
+
+        memset(&ping.reply, 0, sizeof(ping.reply));
+        int recv_size;
+        if (select_ret == 0) {
+            // 超时
+            std::cout << "Request timeout for icmp_seq " << seq << std::endl;
+            usleep(options.interval * 1000);
+            continue;
+        } else if (select_ret == -1) {
+            // 错误
+            TINYTCP_LOG_ERROR(g_logger) << "select error: " << strerror(errno);
+            usleep(options.interval * 1000);
+            continue;
+        }
+
+        // 有数据可读
+        memset(&ping.reply, 0, sizeof(ping.reply));
+        struct sockaddr_in from_addr;
+        socklen_t addr_len = sizeof(from_addr);
+        recv_size = recvfrom(s, (char*)&ping.reply, sizeof(ping.reply), 0, 
+                                (struct sockaddr*)&from_addr, &addr_len);
+        TINYTCP_LOG_INFO(g_logger) << "recv ping";
+
+        if (recv_size > 0) {
+            recv_size = recv_size - sizeof(tinytcp::ipv4_hdr_t) - sizeof(icmpv4_hdr_t);
+            if (memcmp(ping.req.buf, ping.reply.buf, recv_size)) {
+                TINYTCP_LOG_ERROR(g_logger) << "recv data error";
+                continue;
+            }
+            fflush(stdout);
+
+            tinytcp::ipv4_hdr_t* iphdr = &ping.reply.ip_hdr;
+            int send_size = fill_size;
+            if (recv_size == send_size) {
+                std::cout << "recv from " << inet_ntoa(addr.sin_addr) << ": "
+                          << "bytes=" << recv_size
+                          << ", ";
+            }
+            else {
+                std::cout << "recv from " << inet_ntoa(addr.sin_addr) << ": "
+                          << "bytes=" << recv_size << "(send=" << send_size << ")"
+                          << ", ";
+            }
+
+            double diff_ms = (double)(clock() - begin_time) / (CLOCKS_PER_SEC / 1000);
+            if (diff_ms < 1) {
+                std::cout << "time<1ms, TTL=" << uint32_t(iphdr->ttl);
+            }
+            else {
+                std::cout << "time=" << std::fixed << std::setprecision(3) << diff_ms << ", TTL=" << uint32_t(iphdr->ttl);
+            }
+
+            std::cout << std::endl;
+        }
+
+        usleep(options.interval * 1000);
+    }
+
+    close(s);
+}
+
+int main(int argc, char** argv) {
+
+    ping_t ping;
+    PingOptions options;
+    char opt;
+    while ((opt = getopt(argc, argv, "n:l:t:h")) != -1) {
+        switch (opt) {
+            case 'n':
+                options.count = std::stoi(optarg);
+                if (options.count <= 0) {
+                    std::cerr << "错误: Ping次数必须大于0\n";
+                    exit(EXIT_FAILURE);
+                }
+                break;
+            case 'l':
+                options.packet_size = std::stoi(optarg);
+                if (options.packet_size <= 0) {
+                    std::cerr << "错误: 包大小必须大于0\n";
+                    exit(EXIT_FAILURE);
+                }
+                break;
+            case 't':
+                options.timeout = std::stoi(optarg);
+                if (options.timeout <= 0) {
+                    std::cerr << "错误: 超时时间必须大于0\n";
+                    exit(EXIT_FAILURE);
+                }
+                break;
+            case 'h':
+                // print_usage(argv[0]);
+                exit(EXIT_SUCCESS);
+            case '?':
+                std::cerr << "未知选项或缺少参数: -" << char(optopt) << "\n";
+                // print_usage(argv[0]);
+                exit(EXIT_FAILURE);
+            default:
+                // print_usage(argv[0]);
+                exit(EXIT_FAILURE);
+        }
+    }
+    // 获取目标地址（非选项参数）
+    if (optind < argc) {
+        options.target = argv[optind];
+    } else {
+        std::cerr << "错误: 必须指定目标地址\n";
+        // print_usage(argv[0]);
+        exit(EXIT_FAILURE);
+    }
+
+    ping_run(ping, options.target.c_str(), options);
+    return 0;
+}
+
