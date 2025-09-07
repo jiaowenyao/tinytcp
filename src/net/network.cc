@@ -44,7 +44,7 @@ std::list<INetIF*>::iterator INetWork::find_netif_by_name(const std::string& nam
 net_err_t INetWork::exmsg_netif_in(INetIF* netif) {
     TINYTCP_LOG_DEBUG(g_logger) << "exmsg netif in";
     auto protocol_statck = ProtocolStackMgr::get_instance();
-    exmsg_t* msg = protocol_statck->get_msg_block();
+    exmsg_t::ptr msg = protocol_statck->get_msg_block();
     if (msg == nullptr) {
         TINYTCP_LOG_WARN(g_logger) << "no free msg block";
         return net_err_t::NET_ERR_MEM;
@@ -58,7 +58,7 @@ net_err_t INetWork::exmsg_netif_in(INetIF* netif) {
     net_err_t err = msg_send(msg, 0);
     if ((int)err < 0) {
         TINYTCP_LOG_WARN(g_logger) << "msg_send error, msg_queue is full";
-        protocol_statck->release_msg_block(msg);
+        // protocol_statck->release_msg_block(msg);
         return err;
     }
     return net_err_t::NET_ERR_OK;
@@ -118,7 +118,7 @@ INetIF* INetWork::netif_open(const char* dev_name, void* ops_data) {
     return inetif_ptr;
 }
 
-net_err_t INetWork::msg_send(exmsg_t* msg, int32_t timeout_ms) {
+net_err_t INetWork::msg_send(exmsg_t::ptr msg, int32_t timeout_ms) {
     ProtocolStackMgr::get_instance()->push_msg(msg, timeout_ms);
 
     return net_err_t::NET_ERR_OK;

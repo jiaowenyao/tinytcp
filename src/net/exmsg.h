@@ -29,6 +29,8 @@ struct msg_timer_t {
 };
 
 struct exmsg_t {
+    using ptr = std::shared_ptr<exmsg_t>;
+
     enum EXMSGTYPE {
         NET_EXMSG_NETIF_IN,
         NET_EXMSG_TIMER_FUN,

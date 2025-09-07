@@ -19,10 +19,10 @@ public:
 
 public:
     // 内存池操作，获取和释放消息的内存
-    exmsg_t* get_msg_block();
-    net_err_t release_msg_block(exmsg_t* msg);
+    exmsg_t::ptr get_msg_block();
+    // net_err_t release_msg_block(exmsg_t* msg);
     // 操作协议栈的消息队列
-    net_err_t push_msg(exmsg_t* msg, uint32_t timeout_ms);
+    net_err_t push_msg(exmsg_t::ptr msg, uint32_t timeout_ms);
     net_err_t pop_msg();
 
     INetWork* get_network() const noexcept { return m_network.get(); }
@@ -30,7 +30,7 @@ public:
     ICMPProtocol* get_icmpprotocol() const noexcept { return m_icmpprotocol.get(); }
 protected:
     MemBlock::uptr m_mem_block = nullptr;
-    LockFreeRingQueue<exmsg_t*>::uptr m_msg_queue = nullptr;
+    LockFreeRingQueue<exmsg_t::ptr>::uptr m_msg_queue = nullptr;
     std::unique_ptr<INetWork> m_network;
     std::unique_ptr<IPProtocol> m_ipprotocol;
     std::unique_ptr<ICMPProtocol> m_icmpprotocol;

@@ -17,14 +17,14 @@ static tinytcp::Logger::ptr g_logger = TINYTCP_LOG_NAME("system");
 
 static tinytcp::ConfigVar<uint32_t>::ptr g_tcp_msg_queue_size =
     tinytcp::Config::look_up("tcp.msg_queue_size", (uint32_t)1024, "tcp msg queue size");
-static tinytcp::ConfigVar<uint32_t>::ptr g_tcp_timer_msg_queue_size =
-    tinytcp::Config::look_up("tcp.timer_msg_queue_size", (uint32_t)128, "tcp timer msg queue size");
+static tinytcp::ConfigVar<uint32_t>::ptr g_tcp_func_exmsg_queue_size =
+    tinytcp::Config::look_up("tcp.func_exmsg_queue_size", (uint32_t)256, "tcp timer msg queue size");
 
 ProtocolStack::ProtocolStack() {
     TINYTCP_LOG_DEBUG(g_logger) << "g_tcp_msg_queue_size=" << g_tcp_msg_queue_size->value();
     m_mem_block = std::make_unique<MemBlock>(sizeof(exmsg_t), g_tcp_msg_queue_size->value());
     TINYTCP_ASSERT2(m_mem_block != nullptr, "m_mem_block init error");
-    m_msg_queue = std::make_unique<LockFreeRingQueue<exmsg_t*>>(g_tcp_msg_queue_size->value());
+    m_msg_queue = std::make_unique<LockFreeRingQueue<exmsg_t::ptr>>(g_tcp_msg_queue_size->value());
     TINYTCP_ASSERT2(m_msg_queue != nullptr, "m_msg_queue init error");
     m_network = std::make_unique<PcapNetWork>();
     TINYTCP_ASSERT2(m_network != nullptr, "m_network init error");
@@ -54,7 +54,7 @@ void ProtocolStack::work_thread_func() {
 
     while (true) {
         // 阻塞,取出消息
-        exmsg_t* msg = nullptr;
+        exmsg_t::ptr msg = nullptr;
         if (!m_msg_queue->pop(&msg)) {
             continue;
         }
@@ -86,16 +86,16 @@ void ProtocolStack::work_thread_func() {
         }
 
         // 工作线程消费完之后把内存块放回去
-        if (msg->type == exmsg_t::NET_EXMSG_TIMER_FUN) {
-            release_timer_msg_block(msg);
-        }
-        else {
-            release_msg_block(msg);
-        }
+        // if (msg->type == exmsg_t::NET_EXMSG_TIMER_FUN) {
+        //     release_timer_msg_block(msg);
+        // }
+        // else if (msg->type == exmsg_t::NET_EXMSG_NETIF_IN) {
+        //     release_msg_block(msg);
+        // }
     }
 }
 
-net_err_t ProtocolStack::do_netif_in(exmsg_t* msg) {
+net_err_t ProtocolStack::do_netif_in(exmsg_t::ptr msg) {
     INetIF* netif = msg->netif.netif;
 
     while (netif->get_in_queue_size() != 0) {
@@ -161,7 +161,7 @@ void ProtocolStack::timer_thread_func() {
         list_expired_cb(cbs);
         for (auto& cb : cbs) {
             // cb();
-            exmsg_t* timer_exmsg = get_timer_msg_block();
+            exmsg_t::ptr timer_exmsg = get_timer_msg_block();
             if (timer_exmsg == nullptr) {
                 TINYTCP_LOG_ERROR(g_logger) << "get timer msg block error";
                 continue;
@@ -170,29 +170,32 @@ void ProtocolStack::timer_thread_func() {
             timer_exmsg->timer = msg_timer_t(cb);
             if ((int8_t)push_msg(timer_exmsg, -1) < 0) {
                 TINYTCP_LOG_ERROR(g_logger) << "push timer message failed";
-                release_timer_msg_block(timer_exmsg);
+                // release_timer_msg_block(timer_exmsg);
             }
         }
     }
 }
 
-exmsg_t* ProtocolStack::get_timer_msg_block() {
-    exmsg_t* ptr;
-    if (!m_timer_mem_block->alloc((void**)&ptr, 0)) {
+exmsg_t::ptr ProtocolStack::get_timer_msg_block() {
+    exmsg_t* msg;
+    if (!m_func_exmsg_mem_block->alloc((void**)&msg, 0)) {
         return nullptr;
     }
-    new (ptr) exmsg_t();
+    new (msg) exmsg_t();
+    exmsg_t::ptr ptr(msg, [this](const exmsg_t* msg) {
+        m_func_exmsg_mem_block->free(msg);
+    });
     ptr->type = exmsg_t::NET_EXMSG_TIMER_FUN;
     return ptr;
 }
 
-net_err_t ProtocolStack::release_timer_msg_block(exmsg_t* msg) {
-    if (msg) {
-        msg->~exmsg_t();
-        bool ok = m_timer_mem_block->free(msg);
-    }
-    return net_err_t::NET_ERR_OK;
-}
+// net_err_t ProtocolStack::release_timer_msg_block(exmsg_t* msg) {
+//     if (msg) {
+//         msg->~exmsg_t();
+//         bool ok = m_timer_mem_block->free(msg);
+//     }
+//     return net_err_t::NET_ERR_OK;
+// }
 
 
 void ProtocolStack::timer_thread_init() {
@@ -200,10 +203,10 @@ void ProtocolStack::timer_thread_init() {
     TINYTCP_ASSERT2(m_epoll_fd != -1, "epoll_create1 error");
     m_event_fd = eventfd(0, EFD_NONBLOCK);
     TINYTCP_ASSERT2(m_event_fd != -1, "eventfd create error");
-    m_timer_mem_block = std::make_unique<MemBlock>(sizeof(exmsg_t), g_tcp_timer_msg_queue_size->value());
-    TINYTCP_ASSERT2(m_timer_mem_block != nullptr, "m_timer_mem_block init error");
-    m_timer_msg_queue = std::make_unique<LockFreeRingQueue<exmsg_t*>>(g_tcp_timer_msg_queue_size->value());
-    TINYTCP_ASSERT2(m_timer_msg_queue != nullptr, "m_timer_msg_queue init error");
+    m_func_exmsg_mem_block = std::make_unique<MemBlock>(sizeof(exmsg_t), g_tcp_func_exmsg_queue_size->value());
+    TINYTCP_ASSERT2(m_func_exmsg_mem_block != nullptr, "m_timer_mem_block init error");
+    m_func_exmsg_msg_queue = std::make_unique<LockFreeRingQueue<exmsg_t::ptr>>(g_tcp_func_exmsg_queue_size->value());
+    TINYTCP_ASSERT2(m_func_exmsg_msg_queue != nullptr, "m_timer_msg_queue init error");
 
     epoll_event event;
     event.events = EPOLLET | EPOLLIN;

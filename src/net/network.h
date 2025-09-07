@@ -25,7 +25,7 @@ public:
 
 public:
     // 把接收到的数据放入协议栈的消息队列中，并设置等待时间
-    net_err_t msg_send(exmsg_t* msg, int32_t timeout_ms);
+    net_err_t msg_send(exmsg_t::ptr msg, int32_t timeout_ms);
     // 接收网卡数据
     net_err_t exmsg_netif_in(INetIF* netif);
     // 把数据从网卡中发出, 具体调用哪个库就交给子类去实现
