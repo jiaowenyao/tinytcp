@@ -2,22 +2,12 @@
 #include "src/endiantool.h"
 #include "src/net/net.h"
 #include "src/net/sock.h"
+#include "src/log.h"
 #include <string.h>
 
 namespace tinytcp {
 
-#define IPV4_STR_SIZE 16
-#undef INADDR_ANY
-#define INADDR_ANY    (uint32_t)0x00000000;
-
-#undef AF_INET
-#define AF_INET    2
-
-#undef SOCK_RAW
-#define SOCK_RAW   0
-
-#undef IPPROTO_ICMP
-#define IPPROTO_ICMP  0
+static Logger::ptr g_logger = TINYTCP_LOG_NAME("system");
 
 uint32_t htonl(uint32_t hostlong)  { return host_to_net(hostlong);  }
 uint16_t htons(uint16_t hostshort) { return host_to_net(hostshort); }
@@ -69,6 +59,32 @@ int socket(int family, int type, int protocol) {
     return sockfd;
 }
 
+ssize_t sendto(int sockfd, const void *buf, size_t len, int flags,
+                const struct sockaddr *dest_addr, socklen_t addrlen) {
+    if (!buf || !len) {
+        TINYTCP_LOG_ERROR(g_logger) << "param error";
+        return -1;
+    }
+
+    if (dest_addr->sin_family != AF_INET || addrlen != sizeof(sockaddr_in)) {
+        TINYTCP_LOG_ERROR(g_logger) << "param error";
+        return -1;
+    }
+
+    auto p = ProtocolStackMgr::get_instance();
+    int need_size = len;
+    uint8_t* start = (uint8_t*)buf;
+    while (need_size > 0) {
+        int send_size = 0;
+        p->exmsg_func_exec(std::bind(socket_sendto_req_in, sockfd, buf, need_size, flags,
+                                     dest_addr, addrlen, std::ref(send_size)));
+
+        need_size -= send_size;
+        start += send_size;
+    }
+
+    return len - need_size;
+}
 
 } // namespace tinytcp
 

@@ -1,6 +1,7 @@
 #include "sock.h"
 #include "src/config.h"
 #include "src/log.h"
+#include "src/net/raw.h"
 
 namespace tinytcp {
 
@@ -39,6 +40,13 @@ static void socket_free(socket_t* sock) {
     sock->state = socket_t::SOCKET_STATE_FREE;
 }
 
+Sock::Sock(int family, int protocol)
+    : m_family(family)
+    , m_protocol(protocol) {
+    m_local_ip.q_addr = 0;
+    m_remote_ip.q_addr = 0;
+}
+
 net_err_t socket_init() {
     socket_tbl = new socket_t[g_socket_max_size->value()];
 
@@ -52,8 +60,29 @@ net_err_t socket_create_req_in(int family, int type, int protocol, int& sockfd) 
         TINYTCP_LOG_ERROR(g_logger) << "no socket";
         return net_err_t::NET_ERR_MEM;
     }
+    switch (type) {
+        case SOCK_RAW: {
+            sock->sock = new RAWSock(family, protocol);
+            break;
+        }
+    }
     sockfd = get_index(sock);
     return net_err_t::NET_ERR_OK;
+}
+
+net_err_t socket_sendto_req_in(int sockfd, const void *buf, size_t len, int flags,
+                const struct sockaddr *dest_addr, socklen_t addrlen, int& send_size) {
+
+    socket_t* s = get_socket(sockfd);
+    if (!s) {
+        TINYTCP_LOG_ERROR(g_logger) << "param error";
+        return net_err_t::NET_ERR_PARAM;
+    }
+
+    Sock* sock = s->sock;
+    net_err_t err = sock->sendto(buf, len, flags, dest_addr, addrlen, (ssize_t*)&send_size);
+
+    return err;
 }
 
 } // namespace tinytcp

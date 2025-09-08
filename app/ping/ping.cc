@@ -11,7 +11,7 @@
 #include "src/log.h"
 #include "src/util.h"
 #include "src/endiantool.h"
-#include "src/api/net_api.h"
+// #include "src/api/net_api.h"
 
 static tinytcp::Logger::ptr g_logger = TINYTCP_LOG_ROOT();
 
@@ -20,7 +20,7 @@ void ping_run(ping_t& ping, const char* dest, const PingOptions& options) {
     int s = socket(AF_INET, SOCK_RAW, IPPROTO_ICMP);
     TINYTCP_ASSERT2(s > 0, "s=" + std::to_string(s) + ", error=" + strerror(errno));
 
-    struct tinytcp::sockaddr_in addr;
+    struct sockaddr_in addr;
     memset(&addr, 0, sizeof(addr));
     addr.sin_family = AF_INET;
     addr.sin_addr.s_addr = inet_addr(dest);
@@ -119,9 +119,6 @@ void ping_run(ping_t& ping, const char* dest, const PingOptions& options) {
 int main(int argc, char** argv) {
     YAML::Node root = YAML::LoadFile("/home/jwy/workspace/tinytcp/config/log.yaml");
     tinytcp::Config::load_from_yaml(root);
-
-    int socket = tinytcp::socket(AF_INET, SOCK_RAW, IPPROTO_ICMP);
-    TINYTCP_LOG_INFO(g_logger) << "socket=" << socket << std::endl;
 
     ping_t ping;
     PingOptions options;

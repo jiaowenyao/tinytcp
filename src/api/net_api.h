@@ -3,6 +3,7 @@
 #include <inttypes.h>
 #include <stdlib.h>
 #include "src/net/ip.h"
+#include "src/net/sock.h"
 
 namespace tinytcp {
 
@@ -41,6 +42,8 @@ const char *inet_ntop(int af, const void *src, char *dst, size_t size);
 
 
 int socket(int family, int type, int protocol);
+ssize_t sendto(int sockfd, const void *buf, size_t len, int flags,
+                const struct sockaddr *dest_addr, socklen_t addrlen);
 
 
 

@@ -19,7 +19,7 @@ int main() {
     tinytcp::Config::load_from_yaml(root);
 
     tinytcp::ProtocolStack* p = tinytcp::ProtocolStackMgr::get_instance();
-    p->init();
+    // p->init();
     auto pktmgr = tinytcp::PktMgr::get_instance();
 
     auto network = p->get_network();
