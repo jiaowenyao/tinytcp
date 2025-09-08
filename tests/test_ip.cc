@@ -1,12 +1,17 @@
 #include "src/net/net.h"
 #include "src/net/pktbuf.h"
 #include "src/config.h"
+#include "src/magic_enum.h"
 #include "test_net.h"
 #include <list>
 
 template class std::list<tinytcp::PktBlock*>;
 static tinytcp::Logger::ptr g_logger = TINYTCP_LOG_ROOT();
 
+tinytcp::net_err_t exec_test() {
+    std::cout << "okokok" << std::endl;
+    return tinytcp::net_err_t::NET_ERR_EXIST;
+}
 
 int main() {
 
@@ -41,6 +46,9 @@ int main() {
     buf->alloc(32);
     buf->fill(0x53, 32);
     // p->get_ipprotocol()->ipv4_out(1, "192.168.160.1", eth0->get_ipaddr(), buf);
+
+    tinytcp::net_err_t err = p->exmsg_func_exec(exec_test);
+    std::cout << "exmsg_func_exec return:" << magic_enum::enum_name(err) << std::endl;
 
     while (1) {
         sleep(1);

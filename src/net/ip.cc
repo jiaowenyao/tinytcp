@@ -384,7 +384,7 @@ std::list<ip_frag_t::ptr>::iterator IPProtocol::find_frag(const ipaddr_t& ipaddr
     return m_frag_list.end();
 }
 
-void IPProtocol::frag_timer() {
+net_err_t IPProtocol::frag_timer() {
     for (auto it = m_frag_list.begin(); it != m_frag_list.end();) {
         auto frag = *it;
         if (--(frag->timeout) <= 0) {
@@ -394,6 +394,7 @@ void IPProtocol::frag_timer() {
             ++it;
         }
     }
+    return net_err_t::NET_ERR_OK;
 }
 
 void IPProtocol::frag_add(ip_frag_t::ptr frag, const ipaddr_t& ip, uint16_t id) {

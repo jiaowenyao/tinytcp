@@ -109,7 +109,7 @@ public:
     void release_ip_frag(ip_frag_t*);
     std::list<ip_frag_t::ptr>::iterator find_frag(const ipaddr_t& ipaddr, uint16_t id);
     net_err_t frag_insert(ip_frag_t::ptr frag, PktBuffer::ptr buf, ipv4_pkt_t* pkt);
-    void frag_timer();
+    net_err_t frag_timer();
     void frag_debug_print();
 
 private:

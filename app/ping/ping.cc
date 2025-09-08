@@ -9,6 +9,7 @@
 #include "src/log.h"
 #include "src/util.h"
 #include "src/endiantool.h"
+#include "src/api/net_api.h"
 
 static tinytcp::Logger::ptr g_logger = TINYTCP_LOG_ROOT();
 
@@ -17,7 +18,7 @@ void ping_run(ping_t& ping, const char* dest, const PingOptions& options) {
     int s = socket(AF_INET, SOCK_RAW, IPPROTO_ICMP);
     TINYTCP_ASSERT2(s > 0, "s=" + std::to_string(s) + ", error=" + strerror(errno));
 
-    struct sockaddr_in addr;
+    struct tinytcp::sockaddr_in addr;
     memset(&addr, 0, sizeof(addr));
     addr.sin_family = AF_INET;
     addr.sin_addr.s_addr = inet_addr(dest);
@@ -39,7 +40,7 @@ void ping_run(ping_t& ping, const char* dest, const PingOptions& options) {
         ping.req.echo_hdr.checksum = tinytcp::checksum16(0, &ping.req, total_size, 0, 1);
         int send_size = sendto(s, (const char*)&ping.req, total_size, 0, (const struct sockaddr*)&addr, sizeof(addr));
         if (send_size < 0) {
-            TINYTCP_LOG_ERROR(g_logger) << "sendto error";
+            TINYTCP_LOG_ERROR(g_logger) << "sendto error:" << strerror(errno);
             break;
         }
 

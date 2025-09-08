@@ -23,7 +23,7 @@ bool Timer::Comparator::operator()(const Timer::ptr& lhs, const Timer::ptr& rhs)
     return lhs.get() < rhs.get();
 }
 
-Timer::Timer(uint64_t ms, std::function<void()> cb, bool recurring, TimerManager* manager)
+Timer::Timer(uint64_t ms, std::function<net_err_t()> cb, bool recurring, TimerManager* manager)
     : m_recurring(recurring)
     , m_ms(ms)
     , m_cb(cb)
@@ -98,22 +98,23 @@ TimerManager::~TimerManager() {
 
 }
 
-Timer::ptr TimerManager::add_timer(uint64_t ms, std::function<void()> cb, bool recurring) {
+Timer::ptr TimerManager::add_timer(uint64_t ms, std::function<net_err_t()> cb, bool recurring) {
     Timer::ptr timer(new Timer(ms, cb, recurring, this));
     RWMutexType::WriteLock lock(m_mutex);
     add_timer(timer, lock);
     return timer;
 }
 
-static void on_timer(std::weak_ptr<void> weak_cond, std::function<void()> cb) {
+static net_err_t on_timer(std::weak_ptr<void> weak_cond, std::function<net_err_t()> cb) {
     // 检查weak_ptr指向的资源有没有被释放掉, 没有的情况下才执行回调函数
     std::shared_ptr<void> tmp = weak_cond.lock();
     if (tmp) {
         cb();
     }
+    return net_err_t::NET_ERR_OK;
 }
 
-Timer::ptr TimerManager::add_condition_timer(uint64_t ms, std::function<void()> cb,
+Timer::ptr TimerManager::add_condition_timer(uint64_t ms, std::function<net_err_t()> cb,
                                 std::weak_ptr<void> weak_cond,
                                 bool recurring) {
     return add_timer(ms, std::bind(&on_timer, weak_cond, cb), recurring);
@@ -134,7 +135,7 @@ uint64_t TimerManager::get_next_time() {
 }
 
 
-void TimerManager::list_expired_cb(std::vector<std::function<void()> >& cbs) {
+void TimerManager::list_expired_cb(std::vector<std::function<net_err_t()> >& cbs) {
     uint64_t now_ms = tinytcp::get_current_ms();
     std::vector<Timer::ptr> expired;
     {

@@ -83,7 +83,7 @@ public:
     net_err_t arp_resolve(EtherNet* netif, const ipaddr_t& ipaddr, PktBuffer::ptr buf);
 
     uint32_t get_cache_timeout() const noexcept;
-    void cache_timer();
+    net_err_t cache_timer();
     void update_from_ipbuf(EtherNet* netif, PktBuffer::ptr buf);
 
     // 网卡关闭时关闭相关的缓存

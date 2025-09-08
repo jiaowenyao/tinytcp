@@ -26,6 +26,12 @@ set(LIB_SRC
     net/icmp.cc
 )
 
+set(API_SRC
+    api/net_api.cc
+)
+
 add_library(tinytcp SHARED ${LIB_SRC})
+add_library(sysapi  SHARED ${API_SRC})
+
 target_link_libraries(tinytcp pcap pthread yaml-cpp)
 

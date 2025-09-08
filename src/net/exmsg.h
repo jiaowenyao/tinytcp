@@ -3,6 +3,7 @@
 #include <functional>
 #include <variant>
 #include "netif.h"
+#include "src/mutex.h"
 
 
 namespace tinytcp {
@@ -16,14 +17,16 @@ struct msg_netif_t {
     ~msg_netif_t()  = default;
 };
 
-// 定时器消息
-struct msg_timer_t {
-    std::function<void()> func;
+// 函数消息
+struct msg_func_t {
+    std::function<net_err_t()> func;
+    net_err_t err;
+    Semaphore sem;
 
-    msg_timer_t() : func(nullptr) {}
-    msg_timer_t(std::function<void()>& cb) : func(std::move(cb)) {}
-    ~msg_timer_t() {
-        std::function<void()> empty;
+    msg_func_t() : func(nullptr) {}
+    msg_func_t(std::function<net_err_t()>& cb) : func(std::move(cb)) {}
+    ~msg_func_t() {
+        std::function<net_err_t()> empty;
         func.swap(empty);
     }
 };
@@ -33,11 +36,12 @@ struct exmsg_t {
 
     enum EXMSGTYPE {
         NET_EXMSG_NETIF_IN,
-        NET_EXMSG_TIMER_FUN,
+        NET_EXMSG_EXEC_FUNC,    // 外部调用
+        NET_EXMSG_TIMER_FUNC,  // 定时器调用
     };
 
     EXMSGTYPE type;
-    // std::variant<msg_netif_t, msg_timer_t> data;
+    // std::variant<msg_netif_t, msg_func_t> data;
     //
     // exmsg_t() : type(NET_EXMSG_NETIF_IN), data(msg_netif_t{}) {}
     // ~exmsg_t() = default;
@@ -49,23 +53,23 @@ struct exmsg_t {
     //     data = msg_netif_t(netif);
     // }
     //
-    // void set_timer(std::function<void()>& func) {
-    //     type = NET_EXMSG_TIMER_FUN;
-    //     data = msg_timer_t(func);
+    // void set_func(std::function<void()>& func) {
+    //     type = NET_EXMSG_func_FUN;
+    //     data = msg_func_t(func);
     // }
 
     union {
         msg_netif_t netif;
-        msg_timer_t timer;
+        msg_func_t func;
     };
 
     exmsg_t() : type(NET_EXMSG_NETIF_IN) {
-        new (&timer) msg_timer_t();
+        new (&func) msg_func_t();
     }
 
     ~exmsg_t() {
-        if (type == NET_EXMSG_TIMER_FUN) {
-            timer.~msg_timer_t();
+        if (type == NET_EXMSG_TIMER_FUNC || type == NET_EXMSG_EXEC_FUNC) {
+            func.~msg_func_t();
         } else {
             netif.~msg_netif_t();
         }

@@ -31,13 +31,14 @@ public:
 private:
     Thread::uptr m_work_thread;
 
-// 定时器相关
 public:
+    // 定时器相关
     void timer_thread_init();
     void timer_thread_func();
     void tickle_event();
-    exmsg_t::ptr get_timer_msg_block();
+    exmsg_t::ptr get_func_exmsg_block();
     // net_err_t release_timer_msg_block(exmsg_t* msg);
+    net_err_t exmsg_func_exec(std::function<net_err_t()> func);
 private:
     int m_epoll_fd;
     int m_event_fd;

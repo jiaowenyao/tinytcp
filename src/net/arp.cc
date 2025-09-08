@@ -146,7 +146,7 @@ uint32_t ARPProcessor::get_cache_timeout() const noexcept {
     return g_arp_cache_timeout->value();
 }
 
-void ARPProcessor::cache_timer() {
+net_err_t ARPProcessor::cache_timer() {
     uint32_t cache_timeout = g_arp_cache_timeout->value();
     // TINYTCP_LOG_DEBUG(g_logger) << "cache_timer trigger";
     for (auto it = m_cache_list.begin(); it != m_cache_list.end();) {
@@ -190,6 +190,7 @@ void ARPProcessor::cache_timer() {
             ++it;
         }
     }
+    return net_err_t::NET_ERR_OK;
 }
 
 void ARPProcessor::update_from_ipbuf(EtherNet* netif, PktBuffer::ptr buf) {

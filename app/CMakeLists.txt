@@ -8,6 +8,7 @@ set(LIBS
     tinytcp
     gtest
     pthread
+    sysapi
 )
 
 
