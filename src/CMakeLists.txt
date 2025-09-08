@@ -24,6 +24,7 @@ set(LIB_SRC
     net/arp.cc
     net/ip.cc
     net/icmp.cc
+    net/sock.cc
 )
 
 set(API_SRC

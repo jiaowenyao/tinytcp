@@ -116,7 +116,7 @@ private:
     std::list<ip_frag_t::ptr> m_frag_list;
 };
 
-
+uint32_t get_ip_frag_scanning_cycle();
 std::ostream& operator<<(std::ostream& os, const ipv4_hdr_t& ipv4_hdr);
 std::ostream& operator<<(std::ostream& os, const ip_frag_t& frag);
 

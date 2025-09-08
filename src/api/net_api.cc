@@ -1,5 +1,7 @@
 #include "net_api.h"
 #include "src/endiantool.h"
+#include "src/net/net.h"
+#include "src/net/sock.h"
 #include <string.h>
 
 namespace tinytcp {
@@ -7,8 +9,15 @@ namespace tinytcp {
 #define IPV4_STR_SIZE 16
 #undef INADDR_ANY
 #define INADDR_ANY    (uint32_t)0x00000000;
+
 #undef AF_INET
 #define AF_INET    2
+
+#undef SOCK_RAW
+#define SOCK_RAW   0
+
+#undef IPPROTO_ICMP
+#define IPPROTO_ICMP  0
 
 uint32_t htonl(uint32_t hostlong)  { return host_to_net(hostlong);  }
 uint16_t htons(uint16_t hostshort) { return host_to_net(hostshort); }
@@ -51,6 +60,14 @@ const char *inet_ntop(int af, const void *src, char *dst, size_t size) {
     return dst;
 }
 
+
+
+int socket(int family, int type, int protocol) {
+    auto p = ProtocolStackMgr::get_instance();
+    int sockfd = -2;
+    p->exmsg_func_exec(std::bind(socket_create_req_in, family, type, protocol, std::ref(sockfd)));
+    return sockfd;
+}
 
 
 } // namespace tinytcp

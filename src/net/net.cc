@@ -8,6 +8,7 @@
 #include "network.h"
 #include "ip.h"
 #include "icmp.h"
+#include "sock.h"
 #include <fcntl.h>
 
 
@@ -37,10 +38,13 @@ ProtocolStack::ProtocolStack() {
     m_work_thread = std::make_unique<Thread>(std::bind(&ProtocolStack::work_thread_func, this), "work_thread");
     // 启动定时器线程
     timer_thread_init();
+    // 启动socket
+    socket_init();
+    init();
 }
 
 net_err_t ProtocolStack::init() {
-    m_ipprotocol->init();
+    add_timer(get_ip_frag_scanning_cycle(), std::bind(&IPProtocol::frag_timer, m_ipprotocol.get()), true);
     return net_err_t::NET_ERR_OK;
 }
 

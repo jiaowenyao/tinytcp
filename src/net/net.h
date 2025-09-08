@@ -39,7 +39,9 @@ public:
     exmsg_t::ptr get_func_exmsg_block();
     // net_err_t release_timer_msg_block(exmsg_t* msg);
     net_err_t exmsg_func_exec(std::function<net_err_t()> func);
+    bool is_initialized() const { return m_initialized.load(); }
 private:
+    std::atomic<bool> m_initialized{false};
     int m_epoll_fd;
     int m_event_fd;
     Thread::uptr m_timer_thread;

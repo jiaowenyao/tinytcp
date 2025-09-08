@@ -40,6 +40,7 @@ int inet_pton(int family, const char *src, void *dst);
 const char *inet_ntop(int af, const void *src, char *dst, size_t size);
 
 
+int socket(int family, int type, int protocol);
 
 
 

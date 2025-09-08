@@ -4,7 +4,9 @@
 #include <time.h>
 #include <iomanip>
 #include <cstdlib>
+#include <yaml-cpp/yaml.h>
 #include "ping.h"
+#include "src/config.h"
 #include "src/macro.h"
 #include "src/log.h"
 #include "src/util.h"
@@ -115,6 +117,11 @@ void ping_run(ping_t& ping, const char* dest, const PingOptions& options) {
 }
 
 int main(int argc, char** argv) {
+    YAML::Node root = YAML::LoadFile("/home/jwy/workspace/tinytcp/config/log.yaml");
+    tinytcp::Config::load_from_yaml(root);
+
+    int socket = tinytcp::socket(AF_INET, SOCK_RAW, IPPROTO_ICMP);
+    TINYTCP_LOG_INFO(g_logger) << "socket=" << socket << std::endl;
 
     ping_t ping;
     PingOptions options;

@@ -179,10 +179,14 @@ IPProtocol::IPProtocol() {
     ip_frag_init __ip_frag_init;
 }
 
-void IPProtocol::init() {
-    auto p = tinytcp::ProtocolStackMgr::get_instance();
-    p->add_timer(g_ip_frag_scanning_cycle->value(), std::bind(&IPProtocol::frag_timer, this), true);
+uint32_t get_ip_frag_scanning_cycle() {
+    return g_ip_frag_scanning_cycle->value();
 }
+
+// void IPProtocol::init() {
+//     auto p = tinytcp::ProtocolStackMgr::get_instance();
+//     p->add_timer(g_ip_frag_scanning_cycle->value(), std::bind(&IPProtocol::frag_timer, this), true);
+// }
 
 IPProtocol::~IPProtocol() {
 
