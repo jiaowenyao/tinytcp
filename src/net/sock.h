@@ -2,6 +2,7 @@
 
 #include "net_err.h"
 #include "ipaddr.h"
+#include "src/mutex.h"
 #include <memory>
 
 namespace tinytcp {
@@ -19,6 +20,13 @@ namespace tinytcp {
 #undef IPPROTO_ICMP
 #define IPPROTO_ICMP  1
 
+#undef SOL_SOCKET
+#define SOL_SOCKET     0
+#undef SO_REVTIMEO
+#define SO_REVTIMEO    1
+#undef SO_SNDTIMEO
+#define SO_SNDTIMEO    1
+
 
 using socklen_t = int;
 
@@ -27,6 +35,11 @@ struct sockaddr {
     // uint8_t sin_family;
     uint16_t sin_family;
     uint8_t sa_data[14];
+};
+
+struct timeval {
+    int tv_sec;
+    int tv_usec;
 };
 
 class Sock;
@@ -41,6 +54,49 @@ struct socket_t {
 
     Sock* sock;
 };
+
+#define SOCK_WAIT_READ      (1 << 0)
+#define SOCK_WAIT_WRITE     (1 << 1)
+#define SOCK_WAIT_CONN      (1 << 2)
+#define SOCK_WAIT_ALL       (SOCK_WAIT_READ | SOCK_WAIT_WRITE | SOCK_WAIT_CONN)
+
+struct sock_req_t;
+struct sock_wait_t {
+    Semaphore sem;
+    net_err_t err;
+    int waiting_cnt;
+    sock_wait_t() : sem(0), err(net_err_t::NET_ERR_OK), waiting_cnt(0) {}
+    void wait_add(uint32_t timeout, sock_req_t* req);
+    void wait_leave(net_err_t err);
+    net_err_t wait_enter(int timeout);
+};
+
+struct sock_data_t {
+    uint8_t* buf;
+    size_t len;
+    int flags;
+    sockaddr* addr;
+    socklen_t* addr_len;
+    ssize_t comp_len;
+};
+
+struct sock_opt_t {
+    int level;
+    int optname;
+    const char* optval;
+    int optlen;
+};
+
+struct sock_req_t {
+    sock_wait_t* wait = nullptr;
+    int wait_timeout = -1; // -1阻塞，0不阻塞，大于0为定时
+    int sockfd;
+    union {
+        sock_data_t data;
+        sock_opt_t  opt;
+    };
+};
+
 
 class Sock {
 public:
@@ -57,6 +113,19 @@ public:
                              const char* optval, int optlen) = 0;
     virtual void destory() {};
 
+    int get_recv_timeout() const noexcept { return m_recv_timeout; }
+    int get_send_timeout() const noexcept { return m_send_timeout; }
+
+    sock_wait_t* get_recv_wait() const noexcept { return m_recv_wait; }
+    sock_wait_t* get_send_wait() const noexcept { return m_send_wait; }
+    sock_wait_t* get_conn_wait() const noexcept { return m_conn_wait; }
+
+    void reset_recv_wait(sock_wait_t* wait = nullptr) noexcept;
+    void reset_send_wait(sock_wait_t* wait = nullptr) noexcept;
+    void reset_conn_wait(sock_wait_t* wait = nullptr) noexcept;
+
+    void wakeup(int type, net_err_t err);
+
 protected:
     uint16_t m_local_port = 0;;
     ipaddr_t m_local_ip;
@@ -66,15 +135,19 @@ protected:
     int m_family;
     int m_protocol;
     net_err_t m_err = net_err_t::NET_ERR_OK;
-    int m_recv_timeout = 0;
-    int m_send_timeout = 0;
+    int m_recv_timeout = -1;
+    int m_send_timeout = -1;
+
+    sock_wait_t* m_recv_wait = nullptr;
+    sock_wait_t* m_send_wait = nullptr;
+    sock_wait_t* m_conn_wait = nullptr;
 
 };
 
 net_err_t socket_init();
+net_err_t socket_setsocket_req_in(sock_req_t* req);
 net_err_t socket_create_req_in(int family, int type, int protocol, int& sockfd);
-net_err_t socket_sendto_req_in(int sockfd, const void *buf, size_t len, int flags,
-                const struct sockaddr *dest_addr, socklen_t addrlen, int& send_size);
-
+net_err_t socket_sendto_req_in(sock_req_t* req);
+net_err_t socket_recvfrom_req_in(sock_req_t* req);
 } // namespace tinytcp
 

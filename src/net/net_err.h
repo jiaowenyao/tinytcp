@@ -21,6 +21,7 @@ enum class net_err_t : int8_t {
     NET_ERR_EXIST,
     ////
     NET_ERR_OK = 0,
+    NET_ERR_NEED_WAIT = 1,
 };
 
 

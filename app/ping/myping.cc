@@ -73,8 +73,8 @@ void ping_run(ping_t& ping, const char* dest, const PingOptions& options) {
         memset(&ping.reply, 0, sizeof(ping.reply));
         struct tinytcp::sockaddr_in from_addr;
         socklen_t addr_len = sizeof(from_addr);
-        // recv_size = recvfrom(s, (char*)&ping.reply, sizeof(ping.reply), 0, 
-        //                         (struct sockaddr*)&from_addr, &addr_len);
+        recv_size = tinytcp::recvfrom(s, (char*)&ping.reply, sizeof(ping.reply), 0, 
+                                (struct tinytcp::sockaddr*)&from_addr, (tinytcp::socklen_t*)&addr_len);
         // TINYTCP_LOG_INFO(g_logger) << "recv ping";
         //
         // if (recv_size > 0) {

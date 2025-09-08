@@ -59,9 +59,33 @@ int socket(int family, int type, int protocol) {
     return sockfd;
 }
 
-ssize_t sendto(int sockfd, const void *buf, size_t len, int flags,
+int setsockopt(int sockfd, int level, int optname,
+                const void *optval, socklen_t optlen) {
+    if (!optval || !optlen) {
+        TINYTCP_LOG_ERROR(g_logger) << "setsockopt error param";
+        return -1;
+    }
+    sock_req_t req;
+    req.wait = nullptr;
+    req.wait_timeout = -1;
+    req.sockfd = sockfd;
+    req.opt.level = level;
+    req.opt.optname = optname;
+    req.opt.optval = (char*)optval;
+    req.opt.optlen = optlen;
+
+    auto p = ProtocolStackMgr::get_instance();
+    net_err_t err = p->exmsg_func_exec(std::bind(socket_setsocket_req_in, &req));
+    if ((int8_t)err < 0) {
+        return -1;
+    }
+
+    return 0;
+}
+
+ssize_t sendto(int sockfd, const void *buf, size_t size, int flags,
                 const struct sockaddr *dest_addr, socklen_t addrlen) {
-    if (!buf || !len) {
+    if (!buf || !size) {
         TINYTCP_LOG_ERROR(g_logger) << "param error";
         return -1;
     }
@@ -71,19 +95,77 @@ ssize_t sendto(int sockfd, const void *buf, size_t len, int flags,
         return -1;
     }
 
-    auto p = ProtocolStackMgr::get_instance();
-    int need_size = len;
+    ssize_t send_size = 0;
     uint8_t* start = (uint8_t*)buf;
-    while (need_size > 0) {
+    auto p = ProtocolStackMgr::get_instance();
+    while (size > 0) {
+        sock_req_t req;
+        req.wait = nullptr;
+        req.sockfd = sockfd;
+        req.data.buf = start;
+        req.data.len = size;
+        req.data.flags = flags;
+        req.data.addr = (sockaddr*)dest_addr;
+        req.data.addr_len = &addrlen;
         int send_size = 0;
-        p->exmsg_func_exec(std::bind(socket_sendto_req_in, sockfd, buf, need_size, flags,
-                                     dest_addr, addrlen, std::ref(send_size)));
+        net_err_t err = p->exmsg_func_exec(std::bind(socket_sendto_req_in, &req));
+        if ((int8_t)err < 0) {
+            TINYTCP_LOG_ERROR(g_logger) << "write failed";
+            return -1;
+        }
 
-        need_size -= send_size;
+        if (req.wait) {
+            err = req.wait->wait_enter(req.wait_timeout);
+            if ((int8_t)err < 0) {
+                TINYTCP_LOG_ERROR(g_logger) << "write failed";
+                return -1;
+            }
+        }
+
+        size -= req.data.comp_len;
+        send_size += req.data.comp_len;
         start += send_size;
     }
 
-    return len - need_size;
+    return send_size;
+}
+
+ssize_t recvfrom(int sockfd, void *buf, size_t len, int flags,
+                struct sockaddr *src_addr, socklen_t *addrlen) {
+    if (!buf || !len || !src_addr) {
+        TINYTCP_LOG_ERROR(g_logger) << "param error";
+        return -1;
+    }
+
+    auto p = ProtocolStackMgr::get_instance();
+
+    while (true) {
+        sock_req_t req;
+        req.wait = nullptr;
+        req.sockfd = sockfd;
+        req.data.buf = (uint8_t*)buf;
+        req.data.len = len;
+        req.data.comp_len = 0;
+        req.data.addr = src_addr;
+        req.data.addr_len = addrlen;
+        net_err_t err = p->exmsg_func_exec(std::bind(socket_recvfrom_req_in, &req));
+        if ((int8_t)err < 0) {
+            TINYTCP_LOG_ERROR(g_logger) << "recv socket failed";
+            return -1;
+        }
+
+        if (req.data.comp_len) {
+            return req.data.comp_len;
+        }
+
+        err = req.wait->wait_enter(req.wait_timeout);
+        if ((int8_t)err < 0) {
+            TINYTCP_LOG_ERROR(g_logger) << "recv failed";
+            return -1;
+        }
+    }
+
+    return 0;
 }
 
 } // namespace tinytcp

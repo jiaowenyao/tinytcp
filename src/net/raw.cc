@@ -14,6 +14,7 @@ RAWSock::RAWSock(int family, int protocol)
         m_protocol = IPPROTO_ICMP;
     }
 
+    m_recv_wait = new sock_wait_t;
 }
 
 RAWSock::~RAWSock() {
@@ -59,7 +60,7 @@ net_err_t RAWSock::recvfrom(const void* buf, size_t len, int flags,
                             const struct sockaddr* src, socklen_t src_len,
                             ssize_t* result_len) {
 
-    return net_err_t::NET_ERR_OK;
+    return net_err_t::NET_ERR_NEED_WAIT;
 }
 
 net_err_t RAWSock::setopt(int level, int optname,

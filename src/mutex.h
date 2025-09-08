@@ -13,6 +13,7 @@ public:
     ~Semaphore();
 
     void wait();
+    int wait_timeout(int timeout);
     void notify();
 
 private:

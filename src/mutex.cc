@@ -20,6 +20,16 @@ void Semaphore::wait() {
     }
 }
 
+int Semaphore::wait_timeout(int timeout) {
+    struct timespec ts;
+    clock_gettime(CLOCK_REALTIME, &ts);
+    ts.tv_sec += timeout / 1000;
+    ts.tv_nsec += (timeout % 1000) * 1000;
+
+    int ret = sem_timedwait(&m_semaphore, &ts);
+    return ret;
+}
+
 void Semaphore::notify() {
     if (sem_post(&m_semaphore) != 0) {
         throw std::logic_error("sem_post error");
