@@ -132,7 +132,7 @@ net_err_t INetWork::set_active(INetIF* netif) {
     }
 
     if (m_default_netif == nullptr && netif->get_type() != NETIF_TYPE_LOOP) {
-        m_default_netif = netif;
+        set_default(netif);
     }
 
     net_err_t err = netif->link_open();
@@ -141,7 +141,19 @@ net_err_t INetWork::set_active(INetIF* netif) {
         return err;
     }
 
+    // 路由添加
+    auto ipproto = ProtocolStackMgr::get_instance()->get_ipprotocol();
+    // 1. 给网关的
+    ipaddr_t net_ip = netif->get_net_ip();
+    ipproto->route_add(net_ip, netif->get_netmask(), ipaddr_t(0U), netif);
+    // 2. 发给自己的
+    static ipaddr_t default_ip("255.255.255.255");
+    ipproto->route_add(netif->get_ipaddr(), default_ip, ipaddr_t(0U), netif);
+
     netif->set_state(INetIF::NETIF_ACTIVE);
+
+    ipproto->debug_print_route_list();
+
     return net_err_t::NET_ERR_OK;
 }
 
@@ -156,12 +168,33 @@ net_err_t INetWork::set_deactive(INetIF* netif) {
     netif->clear_in_queue();
     netif->clear_out_queue();
 
+    auto ipproto = ProtocolStackMgr::get_instance()->get_ipprotocol();
+    ipaddr_t any(0U);
     if (netif == m_default_netif) {
         m_default_netif = nullptr;
+        ipproto->route_remove(any, any);
     }
+
+    // 删除路由
+    ipaddr_t net_ip = netif->get_net_ip();
+    ipproto->route_remove(net_ip, netif->get_netmask());
+    static ipaddr_t default_ip("255.255.255.255");
+    ipproto->route_remove(netif->get_ipaddr(), default_ip);
 
     netif->set_state(INetIF::NETIF_OPENED);
     return net_err_t::NET_ERR_OK;
+}
+
+void INetWork::set_default(INetIF* netif) noexcept {
+    auto ipproto = ProtocolStackMgr::get_instance()->get_ipprotocol();
+    ipaddr_t any(0U);
+    if (!(netif->get_gateway() == any)) {
+        if (m_default_netif) {
+            ipproto->route_remove(any, any);
+        }
+        ipproto->route_add(ipaddr_t(0U), ipaddr_t(0U), netif->get_gateway(), netif);
+    }
+    m_default_netif = netif;
 }
 
 PktBuffer::ptr INetWork::get_buf_from_in_queue(NetListIt netif_it, int timeout_ms) {

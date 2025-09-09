@@ -46,6 +46,16 @@ struct ipaddr_t {
         return q_addr == 0;
     }
 
+    int get_1_cnt() const {
+        int cnt = 0;
+        uint32_t addr = q_addr;
+        while (addr) {
+            ++cnt;
+            addr -= (addr & -addr);
+        }
+        return cnt;
+    }
+
 };
 
 bool is_local_broadcast(const ipaddr_t& ipaddr);

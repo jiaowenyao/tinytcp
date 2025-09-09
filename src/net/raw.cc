@@ -41,7 +41,7 @@ net_err_t RAWSock::sendto(const void* buf, size_t len, int flags,
     }
 
     auto p = ProtocolStackMgr::get_instance();
-    auto default_netif = p->get_network()->get_default();
+    // auto default_netif = p->get_network()->get_default();
 
     ipaddr_t dest_ipaddr(((sockaddr_in*)dest)->sin_addr.s_addr);
     if (m_remote_ip.q_addr != 0 && !(m_remote_ip == dest_ipaddr)) {
@@ -49,7 +49,7 @@ net_err_t RAWSock::sendto(const void* buf, size_t len, int flags,
         return net_err_t::NET_ERR_NOT_SUPPORT;
     }
 
-    err = p->get_ipprotocol()->ipv4_out(m_protocol, dest_ipaddr, default_netif->get_ipaddr(), pktbuf);
+    err = p->get_ipprotocol()->ipv4_out(m_protocol, dest_ipaddr, m_local_ip, pktbuf);
     if ((int8_t)err < 0) {
         TINYTCP_LOG_ERROR(g_logger) << "send error";
         return err;

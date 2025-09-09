@@ -272,6 +272,12 @@ net_err_t EtherNet::open() {
     m_mtu = ETHER_MTU;
     ipaddr_from_str(m_ipaddr, dev_data->ip);
     m_hwaddr.reset(dev_data->hwaddr, 6);
+    if (dev_data->netmask) {
+        ipaddr_from_str(m_netmask, dev_data->netmask);
+    }
+    if (dev_data->gateway) {
+        ipaddr_from_str(m_gateway, dev_data->gateway);
+    }
 
     m_ops_data = pcap;
     m_send_thread = std::make_unique<Thread>(std::bind(&INetWork::send_func, m_network, this), "netif(" + std::string(m_name) + ")_send_thread");

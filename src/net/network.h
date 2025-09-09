@@ -37,7 +37,7 @@ public:
     net_err_t set_active(INetIF* netif);
     net_err_t set_deactive(INetIF* netif);
 
-    void set_default(INetIF* netif) noexcept { m_default_netif = netif; }
+    void set_default(INetIF* netif) noexcept;
     INetIF* get_default() const noexcept { return m_default_netif; }
 
     PktBuffer::ptr get_buf_from_in_queue(NetListIt netif_it, int timeout_ms = -1);

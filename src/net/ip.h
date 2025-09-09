@@ -82,6 +82,21 @@ struct ip_frag_t {
     PktBuffer::ptr frag_join() noexcept;
 };
 
+// 路由
+struct route_entry_t {
+    ipaddr_t net;       // 网络目标
+    ipaddr_t mask;      // 掩码
+    int mask_1_cnt;
+    ipaddr_t next_hop;  // 下一跳的地址
+    INetIF*  netif;
+    route_entry_t(const ipaddr_t& _net, const ipaddr_t& _mask, const ipaddr_t _next_hop, INetIF* _netif)
+        : net(_net)
+        , mask(_mask)
+        , next_hop(_next_hop)
+        , netif(_netif) {
+        mask_1_cnt = mask.get_1_cnt();
+    }
+};
 
 class IPProtocol {
 public:
@@ -97,9 +112,15 @@ public:
     net_err_t ip_normal_in(INetIF* netif, PktBuffer::ptr buf, const ipaddr_t& src_ip, const ipaddr_t& dest_ip);
     // 重组的情况
     net_err_t ip_frag_in(INetIF* netif, PktBuffer::ptr buf, const ipaddr_t& src_ip, const ipaddr_t& dest_ip);
-    net_err_t ip_frag_out(uint8_t protocol, INetIF* netif, const ipaddr_t& dest, const ipaddr_t& src, PktBuffer::ptr buf);
+    net_err_t ip_frag_out(uint8_t protocol, INetIF* netif, const ipaddr_t& dest, const ipaddr_t& src, PktBuffer::ptr buf, const ipaddr_t& next_hop);
     void frag_add(ip_frag_t::ptr frag, const ipaddr_t& ip, uint16_t id);
     void remove_frag(const ip_frag_t& frag);
+
+    // 路由操作
+    void route_add(const ipaddr_t& net, const ipaddr_t& mask, const ipaddr_t& next_hop, INetIF* netif);
+    void route_remove(const ipaddr_t& net, const ipaddr_t& mask);
+    route_entry_t* route_find(const ipaddr_t& ip);
+    void debug_print_route_list();
 
 public:
     static LockFreeRingQueue<ip_frag_t*>& get_ip_frag_queue() noexcept;
@@ -114,11 +135,14 @@ public:
 
 private:
     std::list<ip_frag_t::ptr> m_frag_list;
+    // 路由
+    std::list<route_entry_t> m_route_list;
 };
 
 uint32_t get_ip_frag_scanning_cycle();
 std::ostream& operator<<(std::ostream& os, const ipv4_hdr_t& ipv4_hdr);
 std::ostream& operator<<(std::ostream& os, const ip_frag_t& frag);
+std::ostream& operator<<(std::ostream& os, const route_entry_t& route);
 
 } // namespace tinytcp
 

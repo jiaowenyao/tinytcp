@@ -44,6 +44,8 @@ struct netif_hwaddr_t {
 struct pcap_data_t {
     const char* ip;
     const uint8_t* hwaddr;
+    const char* netmask = nullptr;
+    const char* gateway = nullptr;
 };
 
 
@@ -89,6 +91,9 @@ public:
     void set_ipaddr(const ipaddr_t& addr) noexcept { m_ipaddr = addr; }
     void set_netmask(const ipaddr_t& addr) noexcept { m_netmask = addr; }
     void set_gateway(const ipaddr_t& addr) noexcept { m_gateway = addr; }
+
+    // 获取网络号
+    ipaddr_t get_net_ip() const noexcept { return ipaddr_t(m_ipaddr.q_addr & m_netmask.q_addr); }
 
     void clear_in_queue();
     void clear_out_queue();

@@ -193,7 +193,7 @@ IPProtocol::~IPProtocol() {
 
 }
 
-net_err_t IPProtocol::ip_frag_out(uint8_t protocol, INetIF* netif, const ipaddr_t& dest, const ipaddr_t& src, PktBuffer::ptr buf) {
+net_err_t IPProtocol::ip_frag_out(uint8_t protocol, INetIF* netif, const ipaddr_t& dest, const ipaddr_t& src, PktBuffer::ptr buf, const ipaddr_t& next_hop) {
     TINYTCP_LOG_INFO(g_logger) << "ip_frag_out";
     auto pktmgr = PktMgr::get_instance();
     buf->reset_access();
@@ -227,7 +227,12 @@ net_err_t IPProtocol::ip_frag_out(uint8_t protocol, INetIF* netif, const ipaddr_
         pkt->hdr.ttl = NET_IP_DEFAULT_TTL;
         pkt->hdr.protocol = protocol;
         pkt->hdr.hdr_checksum = 0;
-        pkt->hdr.src_ip = src.q_addr;
+        if (!(src == ipaddr_t(0U))) {
+            pkt->hdr.src_ip = src.q_addr;
+        }
+        else {
+            pkt->hdr.src_ip = netif->get_ipaddr().q_addr;
+        }
         pkt->hdr.dest_ip = dest.q_addr;
 
         pkt->hdr.frag.offset = offset >> 3;
@@ -248,7 +253,7 @@ net_err_t IPProtocol::ip_frag_out(uint8_t protocol, INetIF* netif, const ipaddr_
 
         TINYTCP_LOG_DEBUG(g_logger) << "frag out:\n" << pkt->hdr;
 
-        err = netif->netif_out(dest, dest_buf);
+        err = netif->netif_out(next_hop, dest_buf);
         if ((int8_t)err < 0) {
             TINYTCP_LOG_WARN(g_logger) << "send ip packet error";
             return err;
@@ -263,10 +268,24 @@ net_err_t IPProtocol::ip_frag_out(uint8_t protocol, INetIF* netif, const ipaddr_
 
 net_err_t IPProtocol::ipv4_out(uint8_t protocol, const ipaddr_t& dest, const ipaddr_t& src, PktBuffer::ptr buf) {
     TINYTCP_LOG_DEBUG(g_logger) << "ipv4_out";
+    const static ipaddr_t any(0U);
 
-    auto netif = ProtocolStackMgr::get_instance()->get_network()->get_default();
+    auto route = route_find(dest);
+    if (!route) {
+        TINYTCP_LOG_ERROR(g_logger) << "send failed, no route";
+        return net_err_t::NET_ERR_UNREACH;
+    }
+    ipaddr_t next_hop;
+    if (route->next_hop == any) {
+        next_hop = dest;
+    }
+    else {
+        next_hop = route->next_hop;
+    }
+
+    auto netif = route->netif;
     if (netif->get_mtu() && (buf->get_capacity() + sizeof(ipv4_hdr_t)) > netif->get_mtu()) {
-        net_err_t err = ip_frag_out(protocol, netif, dest, src, buf);
+        net_err_t err = ip_frag_out(protocol, netif, dest, src, buf, next_hop);
         if ((int8_t)err < 0) {
             TINYTCP_LOG_WARN(g_logger) << "send ip frag failed";
             return err;
@@ -292,7 +311,12 @@ net_err_t IPProtocol::ipv4_out(uint8_t protocol, const ipaddr_t& dest, const ipa
     pkt->hdr.ttl = NET_IP_DEFAULT_TTL;
     pkt->hdr.protocol = protocol;
     pkt->hdr.hdr_checksum = 0;
-    pkt->hdr.src_ip = src.q_addr;
+    if (!(src == ipaddr_t(0U))) {
+        pkt->hdr.src_ip = src.q_addr;
+    }
+    else {
+        pkt->hdr.src_ip = netif->get_ipaddr().q_addr;
+    }
     pkt->hdr.dest_ip = dest.q_addr;
 
     pkt->hdr.hdr_host_to_net();
@@ -301,8 +325,7 @@ net_err_t IPProtocol::ipv4_out(uint8_t protocol, const ipaddr_t& dest, const ipa
 
     TINYTCP_LOG_DEBUG(g_logger) << pkt->hdr << "\n" << std::make_pair(std::string((char*)buf->get_data(), sizeof(ipv4_hdr_t)), true);
 
-    auto default_netif = ProtocolStackMgr::get_instance()->get_network()->get_default();
-    err = default_netif->netif_out(dest, buf);
+    err = netif->netif_out(next_hop, buf);
     if ((int8_t)err < 0) {
         TINYTCP_LOG_WARN(g_logger) << "send ip packet error";
         return err;
@@ -496,6 +519,45 @@ void IPProtocol::frag_debug_print() {
     TINYTCP_LOG_DEBUG(g_logger) << "\n" << ss.str();
 }
 
+void IPProtocol::route_add(const ipaddr_t& net, const ipaddr_t& mask, const ipaddr_t& next_hop, INetIF* netif) {
+    m_route_list.push_front(route_entry_t(net, mask, next_hop, netif));
+}
+
+void IPProtocol::route_remove(const ipaddr_t& net, const ipaddr_t& mask) {
+    for (auto it = m_route_list.begin(); it != m_route_list.end();) {
+        auto& route = *it;
+        if (route.net == net && route.mask == mask) {
+            it = m_route_list.erase(it);
+        }
+        else {
+            ++it;
+        }
+    }
+}
+
+void IPProtocol::debug_print_route_list() {
+    std::stringstream ss;
+    ss << "\n";
+    for (auto& route : m_route_list) {
+        ss << route << "\n\n";
+    }
+    TINYTCP_LOG_DEBUG(g_logger) << ss.str();
+}
+
+route_entry_t* IPProtocol::route_find(const ipaddr_t& ip) {
+    route_entry_t* res = nullptr;
+    for (auto& route : m_route_list) {
+        ipaddr_t net_ip(ip.q_addr & route.mask.q_addr);
+        if (!(net_ip == route.net)) {
+            continue;
+        }
+        if (res == nullptr || res->mask_1_cnt < route.mask_1_cnt) {
+            res = &route;
+        }
+    }
+    return res;
+}
+
 std::ostream& operator<<(std::ostream& os, const ipv4_hdr_t& hdr) {
     os  << "\n"
         << "\nshdr=" << hdr.shdr << " version=" << hdr.version << " tos=" << hdr.tos
@@ -524,6 +586,14 @@ std::ostream& operator<<(std::ostream& os, const ip_frag_t& frag) {
             << " frag_start=" << pkt->hdr.get_frag_start()
             << " frag_end=" << pkt->hdr.get_frag_end() - 1;
     }
+    return os;
+}
+
+std::ostream& operator<<(std::ostream& os, const route_entry_t& route) {
+    os  << "net=" << route.net
+        << "\nmask=" << route.mask
+        << "\nnext_hop=" << route.next_hop
+        << "\nnetif_name=" << route.netif->get_name();
     return os;
 }
 

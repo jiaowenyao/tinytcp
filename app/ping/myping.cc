@@ -131,11 +131,14 @@ int main(int argc, char** argv) {
     tinytcp::ipaddr_t _ip;
     tinytcp::pcap_data_t pcap_data {
         .ip = "192.168.171.130",
-        .hwaddr = hwaddr
+        .hwaddr = hwaddr,
+        .netmask = "255.255.240.0",
+        .gateway = "192.168.160.1"
     };
     auto p = tinytcp::ProtocolStackMgr::get_instance();
     auto eth0 = p->get_network()->netif_open("eth0", &pcap_data);
-    eth0->set_netmask("255.255.240.0");
+    // eth0->set_netmask("255.255.240.0");
+    // eth0->set_gateway("192.168.160.1");
 
     ping_t ping;
     PingOptions options;
