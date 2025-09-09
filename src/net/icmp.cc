@@ -3,6 +3,7 @@
 #include "ip.h"
 #include "protocol.h"
 #include "net.h"
+#include "raw.h"
 
 
 namespace tinytcp {
@@ -56,15 +57,15 @@ net_err_t ICMPProtocol::icmpv4_in(const ipaddr_t& src_ip, const ipaddr_t& netif_
         return err;
     }
 
+    /*
+     * 为了适配raw_in函数，所以去除ip包头的操作给到具体的case中去
+     * 这里的get_data就需要做一下偏移了
+    */
     ip_pkt = (ipv4_pkt_t*)buf->get_data();
-    err = buf->remove_header(iphdr_size);
-    if ((int8_t)err < 0) {
-        TINYTCP_LOG_ERROR(g_logger) << "remove ip header error";
-        return err;
-    }
+    icmpv4_pkt_t* icmp_pkt = (icmpv4_pkt_t*)(buf->get_data() + iphdr_size);
     buf->reset_access();
-    icmpv4_pkt_t* icmp_pkt = (icmpv4_pkt_t*)buf->get_data();
-    if (!icmp_pkt->is_pkt_ok(buf->get_capacity(), buf)) {
+    buf->seek(iphdr_size);
+    if (!icmp_pkt->is_pkt_ok(buf->get_capacity() - iphdr_size, buf)) {
         TINYTCP_LOG_WARN(g_logger) << "icmp pkt hdr error";
         return net_err_t::NET_ERR_STATE;
     }
@@ -72,10 +73,20 @@ net_err_t ICMPProtocol::icmpv4_in(const ipaddr_t& src_ip, const ipaddr_t& netif_
 
     switch (icmp_pkt->hdr.type) {
         case ICMPv4_ECHO_REQUEST: {
+            err = buf->remove_header(iphdr_size);
+            if ((int8_t)err < 0) {
+                TINYTCP_LOG_ERROR(g_logger) << "remove ip header error";
+                return err;
+            }
+            buf->reset_access();
             return icmpv4_echo_reply(src_ip, netif_ip, buf);
         }
         default: {
-            return net_err_t::NET_ERR_OK;
+            err = raw_in(buf);
+            if ((int8_t)err < 0) {
+                TINYTCP_LOG_ERROR(g_logger) << "raw in failed.";
+            }
+            return err;
         }
     }
 

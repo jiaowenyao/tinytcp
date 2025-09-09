@@ -5,6 +5,7 @@
 #include "net.h"
 #include "icmp.h"
 #include "network.h"
+#include "raw.h"
 #include "src/log.h"
 #include "src/magic_enum.h"
 #include "src/util.h"
@@ -370,7 +371,11 @@ net_err_t IPProtocol::ip_normal_in(INetIF* netif, PktBuffer::ptr buf, const ipad
             break;
         }
         default: {
-            TINYTCP_LOG_WARN(g_logger) << "unknown protocol";
+            net_err_t err = raw_in(buf);
+            if ((int8_t)err < 0) {
+                TINYTCP_LOG_WARN(g_logger) << "raw in error";
+                return err;
+            }
             break;
         }
     }

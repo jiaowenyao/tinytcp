@@ -1,7 +1,10 @@
 #include "raw.h"
 #include "net.h"
 #include "src/log.h"
+#include "src/config.h"
+#include "sock.h"
 #include "src/api/net_api.h"
+#include <string.h>
 
 
 namespace tinytcp {
@@ -59,13 +62,82 @@ net_err_t RAWSock::sendto(const void* buf, size_t len, int flags,
 net_err_t RAWSock::recvfrom(const void* buf, size_t len, int flags,
                             const struct sockaddr* src, socklen_t src_len,
                             ssize_t* result_len) {
-
-    return net_err_t::NET_ERR_NEED_WAIT;
+    PktBuffer::ptr pktbuf = pop_buf();
+    if (!pktbuf) {
+        *result_len = 0;
+        return net_err_t::NET_ERR_NEED_WAIT;
+    }
+    ipv4_hdr_t* iphdr = (ipv4_hdr_t*)pktbuf->get_data();
+    sockaddr_in* addr = (sockaddr_in*)src;
+    memset(addr, 0, sizeof(*addr));
+    addr->sin_family = AF_INET;
+    addr->sin_port = 0;
+    memcpy(&addr->sin_addr, (void*)&iphdr->src_ip, IPV4_ADDR_SIZE);
+    int size = std::min(pktbuf->get_capacity(), (uint32_t)len);
+    pktbuf->reset_access();
+    net_err_t err = pktbuf->read((uint8_t*)buf, size);
+    if ((int8_t)err < 0) {
+        TINYTCP_LOG_ERROR(g_logger) << "pktbuf read error";
+        return err;
+    }
+    *result_len = size;
+    return net_err_t::NET_ERR_OK;
 }
 
 net_err_t RAWSock::setopt(int level, int optname,
                             const char* optval, int optlen) {
 
+    if (level != SOL_SOCKET) {
+        TINYTCP_LOG_ERROR(g_logger) << "unknown level";
+        return net_err_t::NET_ERR_PARAM;
+    }
+
+    switch (optname) {
+        case SO_RCVTIMEO:
+        case SO_SNDTIMEO: {
+            if (optlen != sizeof(timeval)) {
+                TINYTCP_LOG_ERROR(g_logger) << "unknown level";
+                return net_err_t::NET_ERR_PARAM;
+            }
+            timeval* time = (timeval*)optval;
+            int time_ms = time->tv_sec * 1000 + time->tv_usec / 1000;
+            if (optname == SO_RCVTIMEO) {
+                m_recv_timeout = time_ms;
+                return net_err_t::NET_ERR_OK;
+            }
+            else if (optname == SO_SNDTIMEO) {
+                m_send_timeout = time_ms;
+                return net_err_t::NET_ERR_OK;
+            }
+            else {
+                return net_err_t::NET_ERR_PARAM;
+            }
+            break;
+        }
+        default: {
+            break;
+        }
+    }
+
+    return net_err_t::NET_ERR_PARAM;
+}
+
+net_err_t raw_in(PktBuffer::ptr buf) {
+    ipv4_hdr_t* iphdr = (ipv4_hdr_t*)buf->get_data();
+    ipaddr_t src = iphdr->src_ip;
+    ipaddr_t dest = iphdr->dest_ip;
+    Sock* sock = Sock::find_sock(src, dest, iphdr->protocol);
+    if (!sock) {
+        TINYTCP_LOG_ERROR(g_logger) << "no raw fro this packet";
+        return net_err_t::NET_ERR_UNREACH;
+    }
+    if (sock->push_buf(buf)) {
+        sock->wakeup(SOCK_WAIT_READ, net_err_t::NET_ERR_OK);
+    }
+    else {
+        TINYTCP_LOG_ERROR(g_logger) << "buf full";
+        return net_err_t::NET_ERR_MEM;
+    }
     return net_err_t::NET_ERR_OK;
 }
 

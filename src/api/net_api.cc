@@ -59,6 +59,18 @@ int socket(int family, int type, int protocol) {
     return sockfd;
 }
 
+int close(int sock) {
+    auto p = ProtocolStackMgr::get_instance();
+    sock_req_t req;
+    req.sockfd = sock;
+    net_err_t err = p->exmsg_func_exec(std::bind(socket_close_req_in, &req));
+    if ((int8_t)err < 0) {
+        TINYTCP_LOG_ERROR(g_logger) << "close error";
+        return -1;
+    }
+    return 0;
+}
+
 int setsockopt(int sockfd, int level, int optname,
                 const void *optval, socklen_t optlen) {
     if (!optval || !optlen) {

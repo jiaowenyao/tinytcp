@@ -486,7 +486,7 @@ net_err_t PktBuffer::read(uint8_t* dest, uint32_t size) {
 uint16_t PktBuffer::buf_checksum16(uint32_t size, uint32_t pre_sum, bool complement) {
     uint32_t remain_size = total_blk_remain();
     if (remain_size < size) {
-        TINYTCP_LOG_WARN(g_logger) << "size too big";
+        TINYTCP_LOG_WARN(g_logger) << "size too big, size=" << size;
         return 0;
     }
 

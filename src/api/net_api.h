@@ -42,6 +42,7 @@ const char *inet_ntop(int af, const void *src, char *dst, size_t size);
 
 
 int socket(int family, int type, int protocol);
+int close(int sock);
 int setsockopt(int sockfd, int level, int optname,
                 const void *optval, socklen_t optlen);
 ssize_t sendto(int sockfd, const void *buf, size_t len, int flags,

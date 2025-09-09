@@ -42,6 +42,10 @@ struct ipaddr_t {
             +  std::to_string(a_addr[3]);
     }
 
+    bool is_empty() const {
+        return q_addr == 0;
+    }
+
 };
 
 bool is_local_broadcast(const ipaddr_t& ipaddr);

@@ -16,7 +16,7 @@ static tinytcp::Logger::ptr g_logger = TINYTCP_LOG_ROOT();
 void ping_run(ping_t& ping, const char* dest, const PingOptions& options) {
     static uint16_t start_id = PING_DEFAULT_ID;
     int s = tinytcp::socket(AF_INET, SOCK_RAW, IPPROTO_ICMP);
-    TINYTCP_ASSERT2(s > 0, "s=" + std::to_string(s) + ", error=" + strerror(errno));
+    TINYTCP_ASSERT2(s >= 0, "s=" + std::to_string(s) + ", error=" + strerror(errno));
 
     struct tinytcp::sockaddr_in addr;
     memset(&addr, 0, sizeof(addr));
@@ -46,9 +46,10 @@ void ping_run(ping_t& ping, const char* dest, const PingOptions& options) {
 
         clock_t begin_time = clock();
         // 设置超时时间
-        // struct timeval timeout;
-        // timeout.tv_sec = options.timeout / 1000;
-        // timeout.tv_usec = (options.timeout % 1000) * 1000;
+        tinytcp::timeval timeout;
+        timeout.tv_sec = options.timeout / 1000;
+        timeout.tv_usec = (options.timeout % 1000) * 1000;
+        tinytcp::setsockopt(s, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(tinytcp::timeval));
         // fd_set readfds;
         // FD_ZERO(&readfds);
         // FD_SET(s, &readfds);
@@ -75,44 +76,48 @@ void ping_run(ping_t& ping, const char* dest, const PingOptions& options) {
         socklen_t addr_len = sizeof(from_addr);
         recv_size = tinytcp::recvfrom(s, (char*)&ping.reply, sizeof(ping.reply), 0, 
                                 (struct tinytcp::sockaddr*)&from_addr, (tinytcp::socklen_t*)&addr_len);
+
+        if (recv_size <= 0) {
+            TINYTCP_LOG_INFO(g_logger) << "recv timeout";
+        }
         // TINYTCP_LOG_INFO(g_logger) << "recv ping";
         //
-        // if (recv_size > 0) {
-        //     recv_size = recv_size - sizeof(tinytcp::ipv4_hdr_t) - sizeof(icmpv4_hdr_t);
-        //     if (memcmp(ping.req.buf, ping.reply.buf, recv_size)) {
-        //         TINYTCP_LOG_ERROR(g_logger) << "recv data error";
-        //         continue;
-        //     }
-        //     fflush(stdout);
-        //
-        //     tinytcp::ipv4_hdr_t* iphdr = &ping.reply.ip_hdr;
-        //     int send_size = fill_size;
-        //     if (recv_size == send_size) {
-        //         std::cout << "recv from " << inet_ntoa(addr.sin_addr) << ": "
-        //                   << "bytes=" << recv_size
-        //                   << ", ";
-        //     }
-        //     else {
-        //         std::cout << "recv from " << inet_ntoa(addr.sin_addr) << ": "
-        //                   << "bytes=" << recv_size << "(send=" << send_size << ")"
-        //                   << ", ";
-        //     }
-        //
-        //     double diff_ms = (double)(clock() - begin_time) / (CLOCKS_PER_SEC / 1000);
-        //     if (diff_ms < 1) {
-        //         std::cout << "time<1ms, TTL=" << uint32_t(iphdr->ttl);
-        //     }
-        //     else {
-        //         std::cout << "time=" << std::fixed << std::setprecision(3) << diff_ms << ", TTL=" << uint32_t(iphdr->ttl);
-        //     }
-        //
-        //     std::cout << std::endl;
-        // }
-        //
+        if (recv_size > 0) {
+            recv_size = recv_size - sizeof(tinytcp::ipv4_hdr_t) - sizeof(icmpv4_hdr_t);
+            if (memcmp(ping.req.buf, ping.reply.buf, recv_size)) {
+                TINYTCP_LOG_ERROR(g_logger) << "recv data error";
+                continue;
+            }
+            fflush(stdout);
+
+            tinytcp::ipv4_hdr_t* iphdr = &ping.reply.ip_hdr;
+            int send_size = fill_size;
+            if (recv_size == send_size) {
+                std::cout << "recv from " << inet_ntoa(addr.sin_addr) << ": "
+                          << "bytes=" << recv_size
+                          << ", ";
+            }
+            else {
+                std::cout << "recv from " << inet_ntoa(addr.sin_addr) << ": "
+                          << "bytes=" << recv_size << "(send=" << send_size << ")"
+                          << ", ";
+            }
+
+            double diff_ms = (double)(clock() - begin_time) / (CLOCKS_PER_SEC / 1000);
+            if (diff_ms < 1) {
+                std::cout << "time<1ms, TTL=" << uint32_t(iphdr->ttl);
+            }
+            else {
+                std::cout << "time=" << std::fixed << std::setprecision(3) << diff_ms << ", TTL=" << uint32_t(iphdr->ttl);
+            }
+
+            std::cout << std::endl;
+        }
+
         usleep(options.interval * 1000);
     }
 
-    close(s);
+    tinytcp::close(s);
 }
 
 
@@ -121,14 +126,11 @@ int main(int argc, char** argv) {
     YAML::Node root = YAML::LoadFile("/home/jwy/workspace/tinytcp/config/log.yaml");
     tinytcp::Config::load_from_yaml(root);
 
-    int socket = tinytcp::socket(AF_INET, SOCK_RAW, IPPROTO_ICMP);
-    TINYTCP_LOG_INFO(g_logger) << "socket=" << socket << std::endl;
-
     uint32_t ip;
-    uint8_t hwaddr[6] = {0x00, 0x15, 0x5d, 0xc6, 0x55, 0x2d};
+    uint8_t hwaddr[6] = {0x00, 0x15, 0x5d, 0xc6, 0x5d, 0x57};
     tinytcp::ipaddr_t _ip;
     tinytcp::pcap_data_t pcap_data {
-        .ip = "192.168.171.235",
+        .ip = "192.168.171.130",
         .hwaddr = hwaddr
     };
     auto p = tinytcp::ProtocolStackMgr::get_instance();

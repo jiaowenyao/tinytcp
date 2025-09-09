@@ -7,27 +7,30 @@ namespace tinytcp {
 
 static Logger::ptr g_logger = TINYTCP_LOG_NAME("system");
 
+static ConfigVar<uint32_t>::ptr g_sock_buf_max_size =
+    Config::look_up("ip.sock_buf_max_size", (uint32_t)1024, "sock队列大小");
+
 
 static tinytcp::ConfigVar<uint32_t>::ptr g_socket_max_size =
     tinytcp::Config::look_up("socket.max_size", 1024U, "最多能分配多少个socket");
 
-static socket_t* socket_tbl;
+static socket_t* g_socket_tbl;
 
 
 static int get_index(socket_t* sock) {
-    return (int)(sock - socket_tbl);
+    return (int)(sock - g_socket_tbl);
 }
 
 static socket_t* get_socket(int idx) {
     if (idx < 0 || idx >= g_socket_max_size->value()) {
         return nullptr;
     }
-    return socket_tbl + idx;
+    return g_socket_tbl + idx;
 }
 
 static socket_t* socket_alloc() noexcept {
     for (int i = 0; i < g_socket_max_size->value(); ++i) {
-        socket_t* curr = socket_tbl + i;
+        socket_t* curr = g_socket_tbl + i;
         if (curr->state == socket_t::SOCKET_STATE_FREE) {
             curr->state = socket_t::SOCKET_STATE_USED;
             return curr;
@@ -41,6 +44,11 @@ static void socket_free(socket_t* sock) {
     sock->sock->reset_recv_wait();
     sock->sock->reset_send_wait();
     sock->sock->reset_conn_wait();
+    delete sock->sock;
+}
+
+net_err_t Sock::close() {
+    return net_err_t::NET_ERR_OK;
 }
 
 void sock_wait_t::wait_add(uint32_t timeout, sock_req_t* req) {
@@ -100,22 +108,78 @@ void Sock::wakeup(int type, net_err_t err) {
     }
 }
 
+Sock* Sock::find_sock(const ipaddr_t& src, const ipaddr_t& dest, int protocol) {
+    for (int i = 0; i < g_socket_max_size->value(); ++i) {
+        if (g_socket_tbl[i].state == socket_t::SOCKET_STATE_USED
+            && g_socket_tbl[i].sock != nullptr) {
+            Sock* sock = g_socket_tbl[i].sock;
+            if (sock->m_protocol && sock->m_protocol != protocol) {
+                continue;
+            }
+            if (!sock->m_remote_ip.is_empty() && !(sock->m_remote_ip == src)) {
+                continue;
+            }
+            if (!sock->m_local_ip.is_empty() && !(sock->m_local_ip == dest)) {
+                continue;
+            }
+            return sock;
+        }
+    }
+    return nullptr;
+}
+
+bool Sock::push_buf(PktBuffer::ptr& buf) {
+    return m_buf_queue.push(buf, 0);
+}
+
+PktBuffer::ptr Sock::pop_buf(int timeout) {
+    PktBuffer::ptr buf;
+    if (timeout < 0) {
+        timeout = -1;
+    }
+    bool ok = m_buf_queue.pop(&buf, timeout);
+    if (ok) {
+        buf->reset_access();
+        return buf;
+    }
+    return nullptr;
+}
+
 Sock::Sock(int family, int protocol)
     : m_family(family)
-    , m_protocol(protocol) {
+    , m_protocol(protocol)
+    , m_buf_queue(g_sock_buf_max_size->value()){
     m_local_ip.q_addr = 0;
     m_remote_ip.q_addr = 0;
 }
 
 net_err_t socket_init() {
-    socket_tbl = new socket_t[g_socket_max_size->value()];
+    g_socket_tbl = new socket_t[g_socket_max_size->value()];
 
     return net_err_t::NET_ERR_OK;
 }
 
-net_err_t socket_setsocket_req_in(sock_req_t* req) {
+net_err_t socket_close_req_in(sock_req_t* req) {
+    socket_t* s = get_socket(req->sockfd);
+    if (!s) {
+        TINYTCP_LOG_ERROR(g_logger) << "param error";
+        return net_err_t::NET_ERR_PARAM;
+    }
+    net_err_t err = s->sock->close();
+    socket_free(s);
+    return err;
+}
 
-    return net_err_t::NET_ERR_OK;
+net_err_t socket_setsocket_req_in(sock_req_t* req) {
+    socket_t * s = get_socket(req->sockfd);
+    if (s== nullptr) {
+        TINYTCP_LOG_ERROR(g_logger) << "no socket";
+        return net_err_t::NET_ERR_PARAM;
+    }
+    Sock* sock = s->sock;
+    sock_opt_t* opt = &req->opt;
+
+    return sock->setopt(opt->level, opt->optname, opt->optval, opt->optlen);
 }
 
 net_err_t socket_create_req_in(int family, int type, int protocol, int& sockfd) {

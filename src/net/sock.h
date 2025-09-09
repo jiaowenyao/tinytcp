@@ -2,6 +2,7 @@
 
 #include "net_err.h"
 #include "ipaddr.h"
+#include "pktbuf.h"
 #include "src/mutex.h"
 #include <memory>
 
@@ -22,10 +23,10 @@ namespace tinytcp {
 
 #undef SOL_SOCKET
 #define SOL_SOCKET     0
-#undef SO_REVTIMEO
-#define SO_REVTIMEO    1
+#undef SO_RCVTIMEO
+#define SO_RCVTIMEO    1
 #undef SO_SNDTIMEO
-#define SO_SNDTIMEO    1
+#define SO_SNDTIMEO    2
 
 
 using socklen_t = int;
@@ -111,7 +112,7 @@ public:
                              ssize_t* result_len) = 0;
     virtual net_err_t setopt(int level, int optname,
                              const char* optval, int optlen) = 0;
-    virtual void destory() {};
+    virtual net_err_t close();
 
     int get_recv_timeout() const noexcept { return m_recv_timeout; }
     int get_send_timeout() const noexcept { return m_send_timeout; }
@@ -125,6 +126,11 @@ public:
     void reset_conn_wait(sock_wait_t* wait = nullptr) noexcept;
 
     void wakeup(int type, net_err_t err);
+    bool push_buf(PktBuffer::ptr& buf);
+    PktBuffer::ptr pop_buf(int timeout = 0);
+
+public:
+    static Sock* find_sock(const ipaddr_t& src, const ipaddr_t& dest, int protocol);
 
 protected:
     uint16_t m_local_port = 0;;
@@ -142,9 +148,11 @@ protected:
     sock_wait_t* m_send_wait = nullptr;
     sock_wait_t* m_conn_wait = nullptr;
 
+    LockFreeRingQueue<PktBuffer::ptr> m_buf_queue;
 };
 
 net_err_t socket_init();
+net_err_t socket_close_req_in(sock_req_t* req);
 net_err_t socket_setsocket_req_in(sock_req_t* req);
 net_err_t socket_create_req_in(int family, int type, int protocol, int& sockfd);
 net_err_t socket_sendto_req_in(sock_req_t* req);

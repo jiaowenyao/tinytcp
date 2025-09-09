@@ -1,5 +1,7 @@
 #pragma once
 #include "sock.h"
+#include "pktbuf.h"
+#include "lock_free_ring_queue.h"
 
 
 namespace tinytcp {
@@ -20,6 +22,7 @@ public:
 };
 
 
+net_err_t raw_in(PktBuffer::ptr buf);
 
 
 } // namespace tinytcp
