@@ -34,6 +34,8 @@ public:
                              struct sockaddr* src, socklen_t src_len,
                              ssize_t* result_len) override;
 
+    net_err_t bind(sockaddr* addr, socklen_t addr_len) override;
+
     net_err_t udp_out(const ipaddr_t& dest, uint16_t port, PktBuffer::ptr);
 };
 

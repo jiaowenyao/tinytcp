@@ -253,6 +253,31 @@ net_err_t udp_in(PktBuffer::ptr buf, const ipaddr_t& src_ip, const ipaddr_t& des
     return net_err_t::NET_ERR_OK;
 }
 
+net_err_t UDPSock::bind(sockaddr* addr, socklen_t addr_len) {
+    if (m_local_port != 0) {
+        TINYTCP_LOG_ERROR(g_logger) << "already binded";
+        return net_err_t::NET_ERR_BINDED;
+    }
+    const sockaddr_in* addr_in = (sockaddr_in*)addr;
+    ipaddr_t local_ip = ipaddr_t(addr_in->sin_addr.s_addr);
+    uint16_t port = net_to_host(addr_in->sin_port);
+    bool used_port = false;
+    for (auto& udp : g_udp_list) {
+        if (udp == this) {
+            continue;
+        }
+        if (udp->m_local_port == port && m_local_ip == local_ip) {
+            used_port = true;
+            break;
+        }
+    }
+    if (used_port) {
+        TINYTCP_LOG_ERROR(g_logger) << "port already used";
+        return net_err_t::NET_ERR_BINDED;
+    }
+    return sock_bind(local_ip, port);
+}
+
 std::ostream& operator<<(std::ostream& os, const udp_hdr_t& hdr) {
     os  << "src_port=" << net_to_host(hdr.src_port)
         << "\ndest_port=" << net_to_host(hdr.dest_port)

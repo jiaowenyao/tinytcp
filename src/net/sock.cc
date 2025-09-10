@@ -3,6 +3,7 @@
 #include "src/log.h"
 #include "src/net/raw.h"
 #include "src/net/udp.h"
+#include "src/net/net.h"
 #include "src/api/net_api.h"
 #include "src/endiantool.h"
 
@@ -194,6 +195,26 @@ net_err_t Sock::connect(sockaddr* addr, socklen_t addr_len) {
     return net_err_t::NET_ERR_OK;
 }
 
+net_err_t Sock::bind(sockaddr* addr, socklen_t addr_len) {
+
+    return net_err_t::NET_ERR_OK;
+}
+
+net_err_t Sock::sock_bind(const ipaddr_t& ip, uint16_t port) {
+    if (!(ip == ipaddr_t(0U))) {
+        auto ipproto = ProtocolStackMgr::get_instance()->get_ipprotocol();
+        route_entry_t* rt = ipproto->route_find(ip);
+        if (!rt || !(rt->netif->get_ipaddr() == ip)) {
+            TINYTCP_LOG_ERROR(g_logger) << "addr error";
+            return net_err_t::NET_ERR_PARAM;
+        }
+    }
+    m_local_ip = ip;
+    m_local_port = port;
+
+    return net_err_t::NET_ERR_OK;
+}
+
 net_err_t Sock::send(const void* buf, size_t len, int flags, ssize_t* result_len) {
     sockaddr_in dest;
     dest.sin_family = m_family;
@@ -372,6 +393,13 @@ net_err_t socket_connect_req_in(sock_req_t* req) {
     return net_err_t::NET_ERR_OK;
 }
 
+net_err_t socket_bind_req_in(sock_req_t* req) {
+    GET_SOCKET;
+
+    Sock* sock = s->sock;
+
+    return sock->bind(req->bind.addr, req->bind.addr_len);
+}
 
 
 } // namespace tinytcp

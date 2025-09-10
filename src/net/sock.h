@@ -97,6 +97,11 @@ struct sock_conn_t {
     socklen_t addr_len;
 };
 
+struct sock_bind_t {
+    sockaddr* addr;
+    socklen_t addr_len;
+};
+
 struct sock_req_t {
     sock_wait_t* wait = nullptr;
     int wait_timeout = -1; // -1阻塞，0不阻塞，大于0为定时
@@ -105,6 +110,7 @@ struct sock_req_t {
         sock_data_t data;
         sock_opt_t  opt;
         sock_conn_t conn;
+        sock_bind_t bind;
     };
 };
 
@@ -128,6 +134,7 @@ public:
     virtual net_err_t setopt(int level, int optname,
                              const char* optval, int optlen);
     virtual net_err_t connect(sockaddr* addr, socklen_t addr_len);
+    virtual net_err_t bind(sockaddr* addr, socklen_t addr_len);
 
     virtual net_err_t close();
 
@@ -154,6 +161,8 @@ public:
     void wakeup(int type, net_err_t err);
     bool push_buf(PktBuffer::ptr& buf);
     PktBuffer::ptr pop_buf(int timeout = 0);
+
+    net_err_t sock_bind(const ipaddr_t& ip, uint16_t port);
 
 public:
     static Sock* find_sock(const ipaddr_t& src, const ipaddr_t& dest, int protocol);
@@ -186,5 +195,7 @@ net_err_t socket_send_req_in(sock_req_t* req);
 net_err_t socket_recvfrom_req_in(sock_req_t* req);
 net_err_t socket_recv_req_in(sock_req_t* req);
 net_err_t socket_connect_req_in(sock_req_t* req);
+net_err_t socket_bind_req_in(sock_req_t* req);
+
 } // namespace tinytcp
 

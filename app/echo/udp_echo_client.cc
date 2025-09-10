@@ -76,7 +76,7 @@ int udp_echo_client_start(const char* ip, int port) {
 
 end:
     if (s >= 0) {
-        close(s);
+        tinytcp::close(s);
     }
     return -1;
 }

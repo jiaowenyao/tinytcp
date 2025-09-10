@@ -281,6 +281,28 @@ int connect(int sockfd, const struct sockaddr *addr, socklen_t addrlen) {
     return 0;
 }
 
+int bind(int sockfd, const struct sockaddr *addr, socklen_t addrlen) {
+    if (!addr || addrlen != sizeof(sockaddr) || sockfd < 0) {
+        TINYTCP_LOG_ERROR(g_logger) << "param error";
+        return -1;
+    }
+    if (addr->sin_family != AF_INET) {
+        TINYTCP_LOG_ERROR(g_logger) << "family error";
+        return -1;
+    }
+    sock_req_t req;
+    req.sockfd = sockfd;
+    req.bind.addr = (sockaddr*)addr;
+    req.bind.addr_len = addrlen;
+    auto p = ProtocolStackMgr::get_instance();
+    net_err_t err = p->exmsg_func_exec(std::bind(socket_bind_req_in, &req));
+    if ((int8_t)err < 0) {
+        TINYTCP_LOG_ERROR(g_logger) << "connect error";
+        return -1;
+    }
+
+    return 0;
+}
 
 
 } // namespace tinytcp
