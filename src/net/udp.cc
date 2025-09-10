@@ -181,10 +181,10 @@ static UDPSock* find_udp(const ipaddr_t& src_ip, uint16_t src_port, const ipaddr
         if (sock->get_local_port() != dest_port) {
             continue;
         }
-        if (!(sock->get_local_ip() == ipaddr_t(0U)) && !(sock->get_local_port() == dest_ip)) {
+        if (!(sock->get_local_ip() == ipaddr_t(0U)) && !(sock->get_local_ip() == dest_ip)) {
             continue;
         }
-        if (!(sock->get_remote_ip() == ipaddr_t(0U)) && !(sock->get_remote_port() == src_ip)) {
+        if (!(sock->get_remote_ip() == ipaddr_t(0U)) && !(sock->get_remote_ip() == src_ip)) {
             continue;
         }
         if (sock->get_remote_port() != 0 && sock->get_remote_port() != src_port) {

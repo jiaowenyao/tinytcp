@@ -92,6 +92,11 @@ struct sock_opt_t {
     int optlen;
 };
 
+struct sock_conn_t {
+    sockaddr* addr;
+    socklen_t addr_len;
+};
+
 struct sock_req_t {
     sock_wait_t* wait = nullptr;
     int wait_timeout = -1; // -1阻塞，0不阻塞，大于0为定时
@@ -99,6 +104,7 @@ struct sock_req_t {
     union {
         sock_data_t data;
         sock_opt_t  opt;
+        sock_conn_t conn;
     };
 };
 
@@ -118,6 +124,8 @@ public:
                              ssize_t* result_len) = 0;
     virtual net_err_t setopt(int level, int optname,
                              const char* optval, int optlen);
+    virtual net_err_t connect(sockaddr* addr, socklen_t addr_len);
+
     virtual net_err_t close();
 
     uint16_t get_local_port() const noexcept { return m_local_port; }
@@ -172,5 +180,6 @@ net_err_t socket_setsocket_req_in(sock_req_t* req);
 net_err_t socket_create_req_in(int family, int type, int protocol, int& sockfd);
 net_err_t socket_sendto_req_in(sock_req_t* req);
 net_err_t socket_recvfrom_req_in(sock_req_t* req);
+net_err_t socket_connect_req_in(sock_req_t* req);
 } // namespace tinytcp
 

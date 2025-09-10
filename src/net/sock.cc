@@ -3,6 +3,8 @@
 #include "src/log.h"
 #include "src/net/raw.h"
 #include "src/net/udp.h"
+#include "src/api/net_api.h"
+#include "src/endiantool.h"
 
 namespace tinytcp {
 
@@ -185,6 +187,13 @@ PktBuffer::ptr Sock::pop_buf(int timeout) {
     return nullptr;
 }
 
+net_err_t Sock::connect(sockaddr* addr, socklen_t addr_len) {
+    sockaddr_in* remote = (sockaddr_in*)addr;
+    m_remote_ip = ipaddr_t(remote->sin_addr.s_addr);
+    m_remote_port = net_to_host(remote->sin_port);
+    return net_err_t::NET_ERR_OK;
+}
+
 Sock::Sock(int family, int protocol)
     : m_family(family)
     , m_protocol(protocol)
@@ -286,6 +295,30 @@ net_err_t socket_recvfrom_req_in(sock_req_t* req) {
 
     return net_err_t::NET_ERR_OK;
 }
+#define GET_SOCKET                                        \
+    socket_t* s = get_socket(req->sockfd);                \
+    if (!s) {                                             \
+        TINYTCP_LOG_ERROR(g_logger) << "param error";     \
+        return net_err_t::NET_ERR_PARAM;                  \
+    }
+
+net_err_t socket_connect_req_in(sock_req_t* req) {
+    GET_SOCKET;
+
+    Sock* sock = s->sock;
+
+    net_err_t err = sock->connect(req->conn.addr, req->conn.addr_len);
+    if (err == net_err_t::NET_ERR_NEED_WAIT) {
+        auto conn_wait = sock->get_conn_wait();
+        if (conn_wait) {
+            conn_wait->wait_add(sock->get_recv_timeout(), req);
+        }
+    }
+
+    return net_err_t::NET_ERR_OK;
+}
+
+
 
 } // namespace tinytcp
 

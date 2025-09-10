@@ -35,7 +35,7 @@ int udp_echo_client_start(const char* ip, int port) {
     server_addr.sin_addr.s_addr = tinytcp::inet_addr(ip);
     server_addr.sin_port = tinytcp::htons(port);
 
-    // connect(s, (const struct sockaddr*)&server_addr, sizeof(server_addr));
+    tinytcp::connect(s, (const struct tinytcp::sockaddr*)&server_addr, sizeof(server_addr));
 
     printf(">>");
     char buf[128];
