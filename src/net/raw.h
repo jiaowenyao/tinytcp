@@ -15,10 +15,8 @@ public:
                              const struct sockaddr* dest, socklen_t dest_len,
                              ssize_t* result_len) override;
     net_err_t recvfrom(const void* buf, size_t len, int flags,
-                             const struct sockaddr* src, socklen_t src_len,
+                             struct sockaddr* src, socklen_t src_len,
                              ssize_t* result_len) override;
-    net_err_t setopt(int level, int optname,
-                             const char* optval, int optlen) override;
 };
 
 

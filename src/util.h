@@ -5,6 +5,8 @@
 #include <sys/types.h>
 #include <unistd.h>
 #include <vector>
+#include "src/net/ipaddr.h"
+#include "src/net/pktbuf.h"
 
 namespace tinytcp {
     
@@ -23,6 +25,7 @@ std::ostream& operator<<(std::ostream& os, const std::pair<const std::string&, b
 
 // 16位校验和
 uint16_t checksum16(uint32_t offset, void* buf, uint16_t len, uint32_t pre_sum, int complement);
+uint16_t checksum_peso(PktBuffer::ptr, const ipaddr_t& dest, const ipaddr_t& src, uint8_t protocol);
 
 } // namespace tinytcp
 

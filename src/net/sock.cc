@@ -2,6 +2,7 @@
 #include "src/config.h"
 #include "src/log.h"
 #include "src/net/raw.h"
+#include "src/net/udp.h"
 
 namespace tinytcp {
 
@@ -128,6 +129,45 @@ Sock* Sock::find_sock(const ipaddr_t& src, const ipaddr_t& dest, int protocol) {
     return nullptr;
 }
 
+net_err_t Sock::setopt(int level, int optname,
+                            const char* optval, int optlen) {
+
+    if (level != SOL_SOCKET) {
+        TINYTCP_LOG_ERROR(g_logger) << "unknown level";
+        return net_err_t::NET_ERR_PARAM;
+    }
+
+    switch (optname) {
+        case SO_RCVTIMEO:
+        case SO_SNDTIMEO: {
+            if (optlen != sizeof(timeval)) {
+                TINYTCP_LOG_ERROR(g_logger) << "unknown level";
+                return net_err_t::NET_ERR_PARAM;
+            }
+            timeval* time = (timeval*)optval;
+            int time_ms = time->tv_sec * 1000 + time->tv_usec / 1000;
+            if (optname == SO_RCVTIMEO) {
+                m_recv_timeout = time_ms;
+                return net_err_t::NET_ERR_OK;
+            }
+            else if (optname == SO_SNDTIMEO) {
+                m_send_timeout = time_ms;
+                return net_err_t::NET_ERR_OK;
+            }
+            else {
+                return net_err_t::NET_ERR_PARAM;
+            }
+            break;
+        }
+        default: {
+            break;
+        }
+    }
+
+    return net_err_t::NET_ERR_PARAM;
+}
+
+
 bool Sock::push_buf(PktBuffer::ptr& buf) {
     return m_buf_queue.push(buf, 0);
 }
@@ -192,6 +232,12 @@ net_err_t socket_create_req_in(int family, int type, int protocol, int& sockfd) 
     switch (type) {
         case SOCK_RAW: {
             sock->sock = new RAWSock(family, protocol);
+            sock->sock->init();
+            break;
+        }
+        case SOCK_DGRAM: {
+            sock->sock = new UDPSock(family, protocol);
+            sock->sock->init();
             break;
         }
     }

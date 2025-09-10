@@ -1,5 +1,6 @@
 #include "util.h"
 #include "log.h"
+#include "src/endiantool.h"
 #include <execinfo.h>
 #include <sys/time.h>
 #include <iomanip>
@@ -99,6 +100,27 @@ uint16_t checksum16(uint32_t offset, void* buf, uint16_t len, uint32_t pre_sum, 
         return (uint16_t)~checksum;
     }
     return (uint16_t)checksum;
+}
+
+uint16_t checksum_peso(PktBuffer::ptr pktbuf, const ipaddr_t& dest, const ipaddr_t& src, uint8_t protocol) {
+    uint8_t zero_protocol[2] = {0, protocol};
+    int offset = 0;
+    uint32_t sum = checksum16(offset, (void*)src.a_addr, IPV4_ADDR_SIZE, 0, 0);
+    offset += IPV4_ADDR_SIZE;
+
+    sum = checksum16(offset, (void*)dest.a_addr, IPV4_ADDR_SIZE, sum, 0);
+    offset += IPV4_ADDR_SIZE;
+
+    sum = checksum16(offset, zero_protocol, 2, sum, 0);
+    offset += 2;
+
+    uint16_t len = host_to_net((uint16_t)pktbuf->get_capacity());
+    sum = checksum16(offset, &len, 2, sum, 0);
+
+    pktbuf->reset_access();
+    sum = pktbuf->buf_checksum16(pktbuf->get_capacity(), sum, 1);
+
+    return sum;
 }
 
 } // namespace tinytcp

@@ -19,6 +19,7 @@ enum class net_err_t : int8_t {
     NET_ERR_NOT_SUPPORT,
     NET_ERR_UNREACH,
     NET_ERR_EXIST,
+    NET_ERR_BROKEN,
     ////
     NET_ERR_OK = 0,
     NET_ERR_NEED_WAIT = 1,

@@ -60,7 +60,7 @@ net_err_t RAWSock::sendto(const void* buf, size_t len, int flags,
 }
 
 net_err_t RAWSock::recvfrom(const void* buf, size_t len, int flags,
-                            const struct sockaddr* src, socklen_t src_len,
+                            struct sockaddr* src, socklen_t src_len,
                             ssize_t* result_len) {
     PktBuffer::ptr pktbuf = pop_buf();
     if (!pktbuf) {
@@ -82,44 +82,6 @@ net_err_t RAWSock::recvfrom(const void* buf, size_t len, int flags,
     }
     *result_len = size;
     return net_err_t::NET_ERR_OK;
-}
-
-net_err_t RAWSock::setopt(int level, int optname,
-                            const char* optval, int optlen) {
-
-    if (level != SOL_SOCKET) {
-        TINYTCP_LOG_ERROR(g_logger) << "unknown level";
-        return net_err_t::NET_ERR_PARAM;
-    }
-
-    switch (optname) {
-        case SO_RCVTIMEO:
-        case SO_SNDTIMEO: {
-            if (optlen != sizeof(timeval)) {
-                TINYTCP_LOG_ERROR(g_logger) << "unknown level";
-                return net_err_t::NET_ERR_PARAM;
-            }
-            timeval* time = (timeval*)optval;
-            int time_ms = time->tv_sec * 1000 + time->tv_usec / 1000;
-            if (optname == SO_RCVTIMEO) {
-                m_recv_timeout = time_ms;
-                return net_err_t::NET_ERR_OK;
-            }
-            else if (optname == SO_SNDTIMEO) {
-                m_send_timeout = time_ms;
-                return net_err_t::NET_ERR_OK;
-            }
-            else {
-                return net_err_t::NET_ERR_PARAM;
-            }
-            break;
-        }
-        default: {
-            break;
-        }
-    }
-
-    return net_err_t::NET_ERR_PARAM;
 }
 
 net_err_t raw_in(PktBuffer::ptr buf) {

@@ -7,7 +7,7 @@ logs:
       #   file: root_log.txt
       - type: StdoutLogAppender
   - name: system
-    level: DEBUG
+    level: ERROR
     formatter: "%d{%Y-%m-%d %H:%M:%S}%T[%t %N]%T%T[%p]%T[%c]%T%f:%l%T%m%T%n"
     appenders:
       # - type: FileLogAppender

@@ -127,10 +127,10 @@ int main(int argc, char** argv) {
     tinytcp::Config::load_from_yaml(root);
 
     uint32_t ip;
-    uint8_t hwaddr[6] = {0x00, 0x15, 0x5d, 0xc6, 0x5d, 0x57};
+    uint8_t hwaddr[6] = {0x00, 0x15, 0x5d, 0xc6, 0x57, 0x27};
     tinytcp::ipaddr_t _ip;
     tinytcp::pcap_data_t pcap_data {
-        .ip = "192.168.171.130",
+        .ip = "192.168.163.110",
         .hwaddr = hwaddr,
         .netmask = "255.255.240.0",
         .gateway = "192.168.160.1"

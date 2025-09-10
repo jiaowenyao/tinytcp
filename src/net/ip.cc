@@ -6,6 +6,7 @@
 #include "icmp.h"
 #include "network.h"
 #include "raw.h"
+#include "udp.h"
 #include "src/log.h"
 #include "src/magic_enum.h"
 #include "src/util.h"
@@ -387,8 +388,15 @@ net_err_t IPProtocol::ip_normal_in(INetIF* netif, PktBuffer::ptr buf, const ipad
             break;
         }
         case NET_PROTOCOL_UDP: {
-            net_err_t err = ProtocolStackMgr::get_instance()->get_icmpprotocol()->icmpv4_out_unreach(src_ip, netif->get_ipaddr(), ICMPv4_UNREACH_PORT, buf);
-            break;
+            net_err_t err = udp_in(buf, src_ip, dest_ip);
+            if ((int8_t)err < 0) {
+                TINYTCP_LOG_WARN(g_logger) << "udp in failed";
+                if (err == net_err_t::NET_ERR_UNREACH) {
+                    net_err_t err = ProtocolStackMgr::get_instance()->get_icmpprotocol()->icmpv4_out_unreach(src_ip, netif->get_ipaddr(), ICMPv4_UNREACH_PORT, buf);
+                }
+                return err;
+            }
+            return net_err_t::NET_ERR_OK;
         }
         case NET_PROTOCOL_TCP: {
             break;

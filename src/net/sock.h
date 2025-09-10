@@ -17,9 +17,13 @@ namespace tinytcp {
 
 #undef SOCK_RAW
 #define SOCK_RAW   0
+#undef SOCK_DGRAM
+#define SOCK_DGRAM 1
 
 #undef IPPROTO_ICMP
 #define IPPROTO_ICMP  1
+#undef IPPROTO_UDP
+#define IPPROTO_UDP   17
 
 #undef SOL_SOCKET
 #define SOL_SOCKET     0
@@ -104,15 +108,26 @@ public:
     Sock(int family, int protocol);
     virtual ~Sock() = default;
 
+    virtual void init() {}
+
     virtual net_err_t sendto(const void* buf, size_t len, int flags,
                              const struct sockaddr* dest, socklen_t dest_len,
                              ssize_t* result_len) = 0;
     virtual net_err_t recvfrom(const void* buf, size_t len, int flags,
-                             const struct sockaddr* src, socklen_t src_len,
+                             struct sockaddr* src, socklen_t src_len,
                              ssize_t* result_len) = 0;
     virtual net_err_t setopt(int level, int optname,
-                             const char* optval, int optlen) = 0;
+                             const char* optval, int optlen);
     virtual net_err_t close();
+
+    uint16_t get_local_port() const noexcept { return m_local_port; }
+    uint16_t get_remote_port() const noexcept { return m_remote_port; }
+    void set_local_port(uint16_t v) noexcept { m_local_port = v; }
+    void set_remote_port(uint16_t v) noexcept { m_remote_port = v; }
+    const ipaddr_t& get_local_ip() const noexcept { return m_local_ip; }
+    const ipaddr_t& get_remote_ip() const noexcept { return m_remote_ip; }
+    void set_local_ip(const ipaddr_t& ip) noexcept { m_local_ip = ip; }
+    void set_remote_ip(const ipaddr_t& ip) noexcept { m_remote_ip = ip; }
 
     int get_recv_timeout() const noexcept { return m_recv_timeout; }
     int get_send_timeout() const noexcept { return m_send_timeout; }
