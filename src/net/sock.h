@@ -119,9 +119,12 @@ public:
     virtual net_err_t sendto(const void* buf, size_t len, int flags,
                              const struct sockaddr* dest, socklen_t dest_len,
                              ssize_t* result_len) = 0;
+    virtual net_err_t send(const void* buf, size_t len, int flags, ssize_t* result_len);
+
     virtual net_err_t recvfrom(const void* buf, size_t len, int flags,
                              struct sockaddr* src, socklen_t src_len,
                              ssize_t* result_len) = 0;
+    virtual net_err_t recv(const void* buf, size_t len, int flags, ssize_t* result_len);
     virtual net_err_t setopt(int level, int optname,
                              const char* optval, int optlen);
     virtual net_err_t connect(sockaddr* addr, socklen_t addr_len);
@@ -179,7 +182,9 @@ net_err_t socket_close_req_in(sock_req_t* req);
 net_err_t socket_setsocket_req_in(sock_req_t* req);
 net_err_t socket_create_req_in(int family, int type, int protocol, int& sockfd);
 net_err_t socket_sendto_req_in(sock_req_t* req);
+net_err_t socket_send_req_in(sock_req_t* req);
 net_err_t socket_recvfrom_req_in(sock_req_t* req);
+net_err_t socket_recv_req_in(sock_req_t* req);
 net_err_t socket_connect_req_in(sock_req_t* req);
 } // namespace tinytcp
 

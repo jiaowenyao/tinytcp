@@ -142,6 +142,47 @@ ssize_t sendto(int sockfd, const void *buf, size_t size, int flags,
     return send_size;
 }
 
+ssize_t send(int sockfd, const void *buf, size_t size, int flags) {
+    if (!buf || !size) {
+        TINYTCP_LOG_ERROR(g_logger) << "param error";
+        return -1;
+    }
+
+    ssize_t send_size = 0;
+    uint8_t* start = (uint8_t*)buf;
+    auto p = ProtocolStackMgr::get_instance();
+    while (size > 0) {
+        sock_req_t req;
+        req.wait = nullptr;
+        req.sockfd = sockfd;
+        req.data.buf = start;
+        req.data.len = size;
+        req.data.flags = flags;
+        req.data.addr = nullptr;
+        req.data.addr_len = nullptr;
+        int send_size = 0;
+        net_err_t err = p->exmsg_func_exec(std::bind(socket_send_req_in, &req));
+        if ((int8_t)err < 0) {
+            TINYTCP_LOG_ERROR(g_logger) << "write failed";
+            return -1;
+        }
+
+        if (req.wait) {
+            err = req.wait->wait_enter(req.wait_timeout);
+            if ((int8_t)err < 0) {
+                TINYTCP_LOG_ERROR(g_logger) << "write failed";
+                return -1;
+            }
+        }
+
+        size -= req.data.comp_len;
+        send_size += req.data.comp_len;
+        start += send_size;
+    }
+
+    return send_size;
+}
+
 ssize_t recvfrom(int sockfd, void *buf, size_t len, int flags,
                 struct sockaddr *src_addr, socklen_t *addrlen) {
     if (!buf || !len || !src_addr) {
@@ -161,6 +202,43 @@ ssize_t recvfrom(int sockfd, void *buf, size_t len, int flags,
         req.data.addr = src_addr;
         req.data.addr_len = addrlen;
         net_err_t err = p->exmsg_func_exec(std::bind(socket_recvfrom_req_in, &req));
+        if ((int8_t)err < 0) {
+            TINYTCP_LOG_ERROR(g_logger) << "recv socket failed";
+            return -1;
+        }
+
+        if (req.data.comp_len) {
+            return req.data.comp_len;
+        }
+
+        err = req.wait->wait_enter(req.wait_timeout);
+        if ((int8_t)err < 0) {
+            TINYTCP_LOG_ERROR(g_logger) << "recv failed";
+            return -1;
+        }
+    }
+
+    return 0;
+}
+
+ssize_t recv(int sockfd, void *buf, size_t len, int flags) {
+    if (!buf || !len) {
+        TINYTCP_LOG_ERROR(g_logger) << "param error";
+        return -1;
+    }
+
+    auto p = ProtocolStackMgr::get_instance();
+
+    while (true) {
+        sock_req_t req;
+        req.wait = nullptr;
+        req.sockfd = sockfd;
+        req.data.buf = (uint8_t*)buf;
+        req.data.len = len;
+        req.data.comp_len = 0;
+        req.data.addr = nullptr;
+        req.data.addr_len = nullptr;
+        net_err_t err = p->exmsg_func_exec(std::bind(socket_recv_req_in, &req));
         if ((int8_t)err < 0) {
             TINYTCP_LOG_ERROR(g_logger) << "recv socket failed";
             return -1;
@@ -202,6 +280,8 @@ int connect(int sockfd, const struct sockaddr *addr, socklen_t addrlen) {
 
     return 0;
 }
+
+
 
 } // namespace tinytcp
 

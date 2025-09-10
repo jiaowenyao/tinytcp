@@ -48,7 +48,8 @@ int udp_echo_client_start(const char* ip, int port) {
         // 在第一次发送前会自动绑定到本地的某个端口和地址中
         size_t total_len = strlen(buf);
         // ssize_t size = send(s, buf, total_len, 0);
-        ssize_t size = tinytcp::sendto(s, buf, total_len, 0, (struct tinytcp::sockaddr *)&server_addr, sizeof(server_addr));
+        // ssize_t size = tinytcp::sendto(s, buf, total_len, 0, (struct tinytcp::sockaddr *)&server_addr, sizeof(server_addr));
+        ssize_t size = tinytcp::send(s, buf, total_len, 0);
         if (size < 0) {
             printf("send error");
             goto end;
@@ -60,7 +61,8 @@ int udp_echo_client_start(const char* ip, int port) {
         // size = recv(s, buf, sizeof(buf), 0);
         struct tinytcp::sockaddr_in remote_addr;
         tinytcp::socklen_t addr_len;
-        size = tinytcp::recvfrom(s, buf, sizeof(buf), 0, (struct tinytcp::sockaddr*)&remote_addr, &addr_len);
+        // size = tinytcp::recvfrom(s, buf, sizeof(buf), 0, (struct tinytcp::sockaddr*)&remote_addr, &addr_len);
+        size = tinytcp::recv(s, buf, sizeof(buf), 0);
         if (size < 0) {
             printf("recv error");
             goto end;

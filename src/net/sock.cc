@@ -194,6 +194,21 @@ net_err_t Sock::connect(sockaddr* addr, socklen_t addr_len) {
     return net_err_t::NET_ERR_OK;
 }
 
+net_err_t Sock::send(const void* buf, size_t len, int flags, ssize_t* result_len) {
+    sockaddr_in dest;
+    dest.sin_family = m_family;
+    dest.sin_port = host_to_net(m_remote_port);
+    dest.sin_addr.s_addr = m_remote_ip.q_addr;
+    return sendto(buf, len, flags, (const struct sockaddr*)&dest, sizeof(dest), result_len);
+}
+
+net_err_t Sock::recv(const void* buf, size_t len, int flags, ssize_t* result_len) {
+    sockaddr src;
+    socklen_t addr_len;
+    return recvfrom(buf, len, flags, &src, addr_len, result_len);
+}
+
+
 Sock::Sock(int family, int protocol)
     : m_family(family)
     , m_protocol(protocol)
@@ -274,6 +289,23 @@ net_err_t socket_sendto_req_in(sock_req_t* req) {
     return err;
 }
 
+net_err_t socket_send_req_in(sock_req_t* req) {
+    socket_t* s = get_socket(req->sockfd);
+    if (!s) {
+        TINYTCP_LOG_ERROR(g_logger) << "param error";
+        return net_err_t::NET_ERR_PARAM;
+    }
+
+    Sock* sock = s->sock;
+    net_err_t err = sock->send(req->data.buf, req->data.len, req->data.flags, &req->data.comp_len);
+    if (err == net_err_t::NET_ERR_NEED_WAIT) {
+        auto send_wait = sock->get_send_wait();
+        if (send_wait) {
+            send_wait->wait_add(sock->get_send_timeout(), req);
+        }
+    }
+    return err;
+}
 
 net_err_t socket_recvfrom_req_in(sock_req_t* req) {
 
@@ -295,6 +327,28 @@ net_err_t socket_recvfrom_req_in(sock_req_t* req) {
 
     return net_err_t::NET_ERR_OK;
 }
+
+net_err_t socket_recv_req_in(sock_req_t* req) {
+    socket_t* s = get_socket(req->sockfd);
+    if (!s) {
+        TINYTCP_LOG_ERROR(g_logger) << "param error";
+        return net_err_t::NET_ERR_PARAM;
+    }
+
+    Sock* sock = s->sock;
+    net_err_t err = sock->recv(req->data.buf, req->data.len, req->data.flags, &req->data.comp_len);
+    if (err == net_err_t::NET_ERR_NEED_WAIT) {
+        auto recv_wait = sock->get_recv_wait();
+        if (recv_wait) {
+            recv_wait->wait_add(sock->get_recv_timeout(), req);
+        }
+    }
+
+    return net_err_t::NET_ERR_OK;
+}
+
+
+
 #define GET_SOCKET                                        \
     socket_t* s = get_socket(req->sockfd);                \
     if (!s) {                                             \
