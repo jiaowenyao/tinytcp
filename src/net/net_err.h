@@ -30,7 +30,7 @@ enum class net_err_t : int8_t {
 } // namespace tinytcp
 
 #define CHECK_NET_ERROR(err, info)            \
-    if ((int8_t)err < 0) {                    \
+    if ((int8_t)(err) < 0) {                    \
         TINYTCP_LOG_ERROR(g_logger) << info;  \
         return err;                           \
     }

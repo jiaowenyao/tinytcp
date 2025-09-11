@@ -7,6 +7,7 @@
 #include "network.h"
 #include "raw.h"
 #include "udp.h"
+#include "tcp.h"
 #include "src/log.h"
 #include "src/magic_enum.h"
 #include "src/util.h"
@@ -399,7 +400,10 @@ net_err_t IPProtocol::ip_normal_in(INetIF* netif, PktBuffer::ptr buf, const ipad
             return net_err_t::NET_ERR_OK;
         }
         case NET_PROTOCOL_TCP: {
-            break;
+            net_err_t err = buf->remove_header(pkt->hdr.get_header_size());
+            err = tcp_in(buf, src_ip, dest_ip);
+            CHECK_NET_ERROR(err, "tcp in error");
+            return net_err_t::NET_ERR_OK;
         }
         default: {
             net_err_t err = raw_in(buf);

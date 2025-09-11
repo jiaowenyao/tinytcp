@@ -3,6 +3,7 @@
 #include "src/log.h"
 #include "src/net/raw.h"
 #include "src/net/udp.h"
+#include "src/net/tcp.h"
 #include "src/net/net.h"
 #include "src/api/net_api.h"
 #include "src/endiantool.h"
@@ -282,6 +283,11 @@ net_err_t socket_create_req_in(int family, int type, int protocol, int& sockfd) 
         }
         case SOCK_DGRAM: {
             sock->sock = new UDPSock(family, protocol);
+            sock->sock->init();
+            break;
+        }
+        case SOCK_STREAM: {
+            sock->sock = new TCPSock(family, protocol);
             sock->sock->init();
             break;
         }

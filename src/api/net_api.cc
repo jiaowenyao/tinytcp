@@ -68,6 +68,10 @@ int close(int sock) {
         TINYTCP_LOG_ERROR(g_logger) << "close error";
         return -1;
     }
+
+    if (req.wait) {
+        req.wait->wait_enter(req.wait_timeout);
+    }
     return 0;
 }
 
@@ -275,6 +279,11 @@ int connect(int sockfd, const struct sockaddr *addr, socklen_t addrlen) {
     net_err_t err = p->exmsg_func_exec(std::bind(socket_connect_req_in, &req));
     if ((int8_t)err < 0) {
         TINYTCP_LOG_ERROR(g_logger) << "connect error";
+        return -1;
+    }
+
+    if (req.wait && (int8_t)req.wait->wait_enter(req.wait_timeout) < 0) {
+        TINYTCP_LOG_ERROR(g_logger) << "connect failed";
         return -1;
     }
 
