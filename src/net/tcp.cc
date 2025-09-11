@@ -1,10 +1,13 @@
 #include "tcp.h"
+#include "tcp_state.h"
 #include "src/log.h"
 #include "src/config.h"
 #include "src/net/net.h"
 #include "src/api/net_api.h"
 #include "src/endiantool.h"
 #include "src/net/protocol.h"
+
+#include <unordered_map>
 
 
 namespace tinytcp {
@@ -58,6 +61,7 @@ TCPSock::TCPSock(int family, int protocol)
     }
     m_recv_wait = new sock_wait_t;
     m_conn_wait = new sock_wait_t;
+    m_state = TCP_STATE_CLOSED;
 }
 
 TCPSock::~TCPSock() {
@@ -110,6 +114,12 @@ net_err_t TCPSock::tcp_send_syn() {
 
 net_err_t TCPSock::connect(sockaddr* addr, socklen_t addr_len) {
     sockaddr_in* addr_in = (sockaddr_in*)addr;
+
+    if (m_state != TCP_STATE_CLOSED) {
+        TINYTCP_LOG_ERROR(g_logger) << "tcp is not closed";
+        return net_err_t::NET_ERR_STATE;
+    }
+
     m_remote_ip = ipaddr_t(addr_in->sin_addr.s_addr);
     m_remote_port = net_to_host(addr_in->sin_port);
     if (m_local_port == 0) {
@@ -137,6 +147,8 @@ net_err_t TCPSock::connect(sockaddr* addr, socklen_t addr_len) {
     err = tcp_send_syn();
     CHECK_NET_ERROR(err, "tcp_send_syn error");
 
+    m_state = TCP_STATE_SYN_SENT;
+
     return net_err_t::NET_ERR_NEED_WAIT;
 }
 
@@ -154,8 +166,41 @@ net_err_t TCPSock::close() {
 
 
 
+static TCPSock* tcp_find(const ipaddr_t& local_ip, uint16_t local_port, const ipaddr_t& remote_ip, uint16_t remote_port) {
+
+    for (auto& tcp : g_tcp_list) {
+        if (tcp->get_local_port() == local_port
+            && tcp->get_remote_ip() == remote_ip
+            && tcp->get_remote_port() == remote_port) {
+            if (tcp->get_local_ip() == ipaddr_t(0U)) {
+                return tcp;
+            }
+            else if (tcp->get_local_ip() == local_ip) {
+                return tcp;
+            }
+            else {}
+        }
+    }
+
+    return nullptr;
+}
+
 
 net_err_t tcp_in(PktBuffer::ptr buf, const ipaddr_t& src_ip, const ipaddr_t& dest_ip) {
+    const static std::unordered_map<tcp_state_t, tcp_proc_ptr> s_tcp_state_proc = {
+        {TCP_STATE_CLOSED,      tcp_closed_in},
+        {TCP_STATE_LISTEN,      tcp_listen_in},
+        {TCP_STATE_SYN_SENT,    tcp_syn_sent_in},
+        {TCP_STATE_SYN_RECVD,   tcp_syn_recvd_in},
+        {TCP_STATE_ESTABLISHED, tcp_established_in},
+        {TCP_STATE_FIN_WAIT_1,  tcp_fin_wait_1_in},
+        {TCP_STATE_FIN_WAIT_2,  tcp_fin_wait_2_in},
+        {TCP_STATE_CLOSING,     tcp_closing_in},
+        {TCP_STATE_TIME_WAIT,   tcp_time_wait_in},
+        {TCP_STATE_CLOSE_WAIT,  tcp_close_wait_in},
+        {TCP_STATE_LAST_ACK,    tcp_last_ack_in},
+    };
+
     buf->reset_access();
     tcp_hdr_t* tcp_hdr = (tcp_hdr_t*)buf->get_data();
     if (tcp_hdr->checksum) {
@@ -187,7 +232,21 @@ net_err_t tcp_in(PktBuffer::ptr buf, const ipaddr_t& src_ip, const ipaddr_t& des
 
     tcp_seg_t seg(buf, dest_ip, src_ip);
 
-    tcp_send_reset(seg);
+    TCPSock* tcp = tcp_find(dest_ip, dport, src_ip, sport);
+    if (!tcp) {
+        TINYTCP_LOG_INFO(g_logger) << "no tcp found";
+        tcp_send_reset(seg);
+        return net_err_t::NET_ERR_OK;
+    }
+
+    auto it = s_tcp_state_proc.find(tcp->get_state());
+    if (it != s_tcp_state_proc.end()) {
+        it->second(tcp, &seg);
+    }
+    else {
+        TINYTCP_LOG_ERROR(g_logger) << "no state proc!!!";
+        return net_err_t::NET_ERR_PARAM;
+    }
 
     return net_err_t::NET_ERR_OK;
 }
@@ -240,7 +299,7 @@ net_err_t TCPSock::transmit() {
     hdr->ack = host_to_net(m_recv.nxt);
     hdr->flag = 0;
     hdr->f_syn = flags.syn_out;
-    hdr->f_ack = 0;
+    hdr->f_ack = flags.irs_valid;
     hdr->win = host_to_net((uint16_t)1024);
     hdr->urgptr = 0;
     hdr->set_header_size(sizeof(tcp_hdr_t));
@@ -249,6 +308,24 @@ net_err_t TCPSock::transmit() {
 
 
     return hdr->send_out(pktbuf, m_remote_ip, m_local_ip);
+}
+
+net_err_t tcp_abort(TCPSock* tcp, net_err_t err) {
+    tcp->set_state(TCP_STATE_CLOSED);
+    tcp->wakeup(SOCK_WAIT_ALL, err);
+    return net_err_t::NET_ERR_OK;
+}
+
+net_err_t tcp_ack_process(TCPSock* tcp, tcp_seg_t* seg) {
+    INIT_TCP_HDR;
+
+    // 响应报文的处理，una未响应地址+1
+    if (tcp->flags.syn_out) {
+        tcp->m_send.una++;
+        tcp->flags.syn_out = 0;
+    }
+
+    return net_err_t::NET_ERR_OK;
 }
 
 std::ostream& operator<<(std::ostream& os, const tcp_hdr_t& hdr) {

@@ -28,6 +28,7 @@ set(LIB_SRC
     net/raw.cc
     net/udp.cc
     net/tcp.cc
+    net/tcp_state.cc
 )
 
 set(API_SRC

@@ -1,5 +1,6 @@
 #pragma once
 #include "sock.h"
+#include "src/endiantool.h"
 
 
 namespace tinytcp {
@@ -75,6 +76,27 @@ struct tcp_seg_t {
     }
 };
 
+enum tcp_state_t {
+    TCP_STATE_CLOSED,
+    TCP_STATE_LISTEN,
+    TCP_STATE_SYN_SENT,
+    TCP_STATE_SYN_RECVD,
+    TCP_STATE_ESTABLISHED,
+    TCP_STATE_FIN_WAIT_1,
+    TCP_STATE_FIN_WAIT_2,
+    TCP_STATE_CLOSING,
+    TCP_STATE_TIME_WAIT,
+    TCP_STATE_CLOSE_WAIT,
+    TCP_STATE_LAST_ACK,
+
+    TCP_STATE_MAX,
+};
+
+#define INIT_TCP_HDR                          \
+    tcp_hdr_t* tcp_hdr = seg->hdr;            \
+    uint32_t ack = net_to_host(tcp_hdr->ack); \
+    uint32_t seq = net_to_host(tcp_hdr->seq);
+
 
 class TCPSock : public Sock {
 public:
@@ -95,7 +117,11 @@ public:
 
     net_err_t tcp_init_connect();
     net_err_t tcp_send_syn();
-private:
+
+    tcp_state_t get_state() const noexcept { return m_state; }
+    void set_state(tcp_state_t state) noexcept { m_state = state; }
+    tcp_state_t m_state;
+public:
     struct {
         uint32_t una; // 没有确认的数据
         uint32_t nxt; // 下一个需要发送的数据
@@ -110,12 +136,16 @@ private:
     } m_recv;
 
     struct {
-        uint32_t syn_out : 1; // 为1的话,syn已经发送
+        uint32_t syn_out   : 1; // 为1的话,syn已经发送
+        uint32_t irs_valid : 1; // 收到了对端的syn
     } flags;
 };
 
 net_err_t tcp_in(PktBuffer::ptr buf, const ipaddr_t& src_ip, const ipaddr_t& dest_ip);
 net_err_t tcp_send_reset(tcp_seg_t& seg);
+// 终止当前tcp的通信
+net_err_t tcp_abort(TCPSock* tcp, net_err_t err);
+net_err_t tcp_ack_process(TCPSock* tcp, tcp_seg_t* seg);
 
 
 std::ostream& operator<<(std::ostream& os, const tcp_hdr_t& hdr);
