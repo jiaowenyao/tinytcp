@@ -60,6 +60,7 @@ void ProtocolStack::work_thread_func() {
         // 阻塞,取出消息
         exmsg_t::ptr msg = nullptr;
         if (!m_msg_queue->pop(&msg)) {
+            std::this_thread::yield();
             continue;
         }
 

@@ -19,9 +19,9 @@ static ConfigVar<uint32_t>::ptr g_arp_cache_max_pktbuf_size =
 static ConfigVar<uint32_t>::ptr g_arp_cache_timeout = 
     Config::look_up("arp.arp_cache_timeout", (uint32_t)1000, "给arp缓存表的扫描时间, ms");
 static ConfigVar<uint32_t>::ptr g_arp_cache_stable_timeout = 
-    Config::look_up("arp.arp_cache_stable_timeout", (uint32_t)20000, "一个RESOLVE状态的arp缓存保持的时间, ms");
+    Config::look_up("arp.arp_cache_stable_timeout", (uint32_t)200000, "一个RESOLVE状态的arp缓存保持的时间, ms");
 static ConfigVar<uint32_t>::ptr g_arp_cache_pending_timeout = 
-    Config::look_up("arp.arp_cache_pending_timeout", (uint32_t)1000, "arp缓存重新发出请求后的等待时间, ms");
+    Config::look_up("arp.arp_cache_pending_timeout", (uint32_t)120000, "arp缓存重新发出请求后的等待时间, ms");
 static ConfigVar<uint32_t>::ptr g_arp_cache_retry_cnt = 
     Config::look_up("arp.arp_cache_retry_cnt", (uint32_t)5, "arp缓存查询重试次数");
 

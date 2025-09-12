@@ -252,8 +252,24 @@ net_err_t socket_close_req_in(sock_req_t* req) {
         return net_err_t::NET_ERR_PARAM;
     }
     net_err_t err = s->sock->close();
-    socket_free(s);
+    if (err == net_err_t::NET_ERR_NEED_WAIT) {
+        auto conn_wait = s->sock->get_conn_wait();
+        if (conn_wait) {
+            conn_wait->wait_add(s->sock->get_recv_timeout(), req);
+        }
+    }
+    // socket_free(s);
     return err;
+}
+
+net_err_t socket_free_req_in(sock_req_t* req) {
+    socket_t* s = get_socket(req->sockfd);
+    if (!s) {
+        TINYTCP_LOG_ERROR(g_logger) << "param error";
+        return net_err_t::NET_ERR_PARAM;
+    }
+    socket_free(s);
+    return net_err_t::NET_ERR_OK;
 }
 
 net_err_t socket_setsocket_req_in(sock_req_t* req) {

@@ -61,6 +61,7 @@ TCPSock::TCPSock(int family, int protocol)
     }
     m_recv_wait = new sock_wait_t;
     m_conn_wait = new sock_wait_t;
+    m_send_wait = new sock_wait_t;
     m_state = TCP_STATE_CLOSED;
 }
 
@@ -112,6 +113,12 @@ net_err_t TCPSock::tcp_send_syn() {
     return net_err_t::NET_ERR_OK;
 }
 
+net_err_t TCPSock::tcp_send_fin() {
+    flags.fin_out = 1;
+    transmit();
+    return net_err_t::NET_ERR_OK;
+}
+
 net_err_t TCPSock::connect(sockaddr* addr, socklen_t addr_len) {
     sockaddr_in* addr_in = (sockaddr_in*)addr;
 
@@ -152,9 +159,46 @@ net_err_t TCPSock::connect(sockaddr* addr, socklen_t addr_len) {
     return net_err_t::NET_ERR_NEED_WAIT;
 }
 
+net_err_t TCPSock::free() {
+    for (auto it = g_tcp_list.begin(); it != g_tcp_list.end(); ++it) {
+        if (*it == this) {
+            it = g_tcp_list.erase(it);
+            break;
+        }
+    }
+    return net_err_t::NET_ERR_OK;
+}
+
 net_err_t TCPSock::close() {
 
+    switch ((int)m_state) {
+        case TCP_STATE_CLOSED: {
+            TINYTCP_LOG_INFO(g_logger) << "tcp already closed";
+            free();
+            return net_err_t::NET_ERR_OK;
+        }
+        case TCP_STATE_SYN_SENT:
+        case TCP_STATE_SYN_RECVD: {
+            tcp_abort(this, net_err_t::NET_ERR_CLOSE);
+            free();
+            return net_err_t::NET_ERR_OK;
+        }
+        case TCP_STATE_CLOSE_WAIT: {
+            tcp_send_fin();
+            m_state = TCP_STATE_LAST_ACK;
+            return net_err_t::NET_ERR_NEED_WAIT;
+        }
+        case TCP_STATE_ESTABLISHED: {
+            tcp_send_fin();
+            m_state = TCP_STATE_FIN_WAIT_1;
+            return net_err_t::NET_ERR_NEED_WAIT;
+        }
 
+        default: {
+            TINYTCP_LOG_ERROR(g_logger) << "tcp state error";
+            return net_err_t::NET_ERR_STATE;
+        }
+    }
 
     return net_err_t::NET_ERR_OK;
 }
@@ -300,6 +344,7 @@ net_err_t TCPSock::transmit() {
     hdr->flag = 0;
     hdr->f_syn = flags.syn_out;
     hdr->f_ack = flags.irs_valid;
+    hdr->f_fin = flags.fin_out;
     hdr->win = host_to_net((uint16_t)1024);
     hdr->urgptr = 0;
     hdr->set_header_size(sizeof(tcp_hdr_t));
@@ -319,12 +364,58 @@ net_err_t tcp_abort(TCPSock* tcp, net_err_t err) {
 net_err_t tcp_ack_process(TCPSock* tcp, tcp_seg_t* seg) {
     INIT_TCP_HDR;
 
-    // 响应报文的处理，una未响应地址+1
+    // 响应报文的处理，una(未响应地址)+1
     if (tcp->flags.syn_out) {
         tcp->m_send.una++;
         tcp->flags.syn_out = 0;
     }
 
+    return net_err_t::NET_ERR_OK;
+}
+
+net_err_t tcp_send_ack(TCPSock* tcp, tcp_seg_t* seg) {
+    ALLOC_PKTBUF(sizeof(tcp_hdr_t));
+    tcp_hdr_t* hdr = (tcp_hdr_t*)pktbuf->get_data();
+    memset(hdr, 0, sizeof(tcp_hdr_t));
+    hdr->sport = host_to_net(tcp->get_local_port());
+    hdr->dport = host_to_net(tcp->get_remote_port());
+    hdr->seq = host_to_net(tcp->m_send.nxt);
+    hdr->ack = host_to_net(tcp->m_recv.nxt);
+    hdr->flag = 0;
+    hdr->f_syn = 0;
+    hdr->f_ack = 1;
+    hdr->win = host_to_net((uint16_t)1024);
+    hdr->urgptr = 0;
+    hdr->set_header_size(sizeof(tcp_hdr_t));
+
+    return hdr->send_out(pktbuf, tcp->get_remote_ip(), tcp->get_local_ip());
+}
+
+net_err_t tcp_data_in(TCPSock* tcp, tcp_seg_t* seg) {
+    INIT_TCP_HDR;
+
+    int wakeup = 0;
+
+    if (tcp_hdr->f_fin) {
+        tcp->m_recv.nxt++;
+        ++wakeup;
+    }
+
+    if (wakeup) {
+        if (tcp_hdr->f_fin) {
+            tcp->wakeup(SOCK_WAIT_ALL, net_err_t::NET_ERR_CLOSE);
+        }
+        else {
+            tcp->wakeup(SOCK_WAIT_READ, net_err_t::NET_ERR_OK);
+        }
+        tcp_send_ack(tcp, seg);
+    }
+
+    return net_err_t::NET_ERR_OK;
+}
+
+net_err_t tcp_time_wait(TCPSock* tcp, tcp_seg_t* seg) {
+    tcp->set_state(TCP_STATE_TIME_WAIT);
     return net_err_t::NET_ERR_OK;
 }
 

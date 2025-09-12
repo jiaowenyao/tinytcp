@@ -127,6 +127,13 @@ private:
 
 using PktMgr = tinytcp::Singleton<PktManager>;
 
+#define ALLOC_PKTBUF(size)                                              \
+    PktBuffer::ptr pktbuf = PktMgr::get_instance()->get_pktbuffer();    \
+    if (pktbuf == nullptr || !pktbuf->alloc((size))) {                  \
+        return net_err_t::NET_ERR_MEM;                                  \
+    }
+
+
 
 } // namespace tinytcp
 

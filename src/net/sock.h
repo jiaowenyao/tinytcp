@@ -192,6 +192,7 @@ protected:
 
 net_err_t socket_init();
 net_err_t socket_close_req_in(sock_req_t* req);
+net_err_t socket_free_req_in(sock_req_t* req);
 net_err_t socket_setsocket_req_in(sock_req_t* req);
 net_err_t socket_create_req_in(int family, int type, int protocol, int& sockfd);
 net_err_t socket_sendto_req_in(sock_req_t* req);

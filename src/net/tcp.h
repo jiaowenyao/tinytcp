@@ -77,6 +77,7 @@ struct tcp_seg_t {
 };
 
 enum tcp_state_t {
+    TCP_STATE_FREE = 0,
     TCP_STATE_CLOSED,
     TCP_STATE_LISTEN,
     TCP_STATE_SYN_SENT,
@@ -112,11 +113,13 @@ public:
                              ssize_t* result_len) override;
     net_err_t connect(sockaddr* addr, socklen_t addr_len) override;
     net_err_t close() override;
+    net_err_t free();
 
     net_err_t transmit(); // 发送处理函数
 
     net_err_t tcp_init_connect();
     net_err_t tcp_send_syn();
+    net_err_t tcp_send_fin();
 
     tcp_state_t get_state() const noexcept { return m_state; }
     void set_state(tcp_state_t state) noexcept { m_state = state; }
@@ -137,6 +140,7 @@ public:
 
     struct {
         uint32_t syn_out   : 1; // 为1的话,syn已经发送
+        uint32_t fin_out   : 1; // 要发送fin标志位
         uint32_t irs_valid : 1; // 收到了对端的syn
     } flags;
 };
@@ -146,7 +150,9 @@ net_err_t tcp_send_reset(tcp_seg_t& seg);
 // 终止当前tcp的通信
 net_err_t tcp_abort(TCPSock* tcp, net_err_t err);
 net_err_t tcp_ack_process(TCPSock* tcp, tcp_seg_t* seg);
-
+net_err_t tcp_send_ack(TCPSock* tcp, tcp_seg_t* seg);
+net_err_t tcp_data_in(TCPSock* tcp, tcp_seg_t* seg); // data检查, 也能给fin报文发送ack
+net_err_t tcp_time_wait(TCPSock* tcp, tcp_seg_t* seg);
 
 std::ostream& operator<<(std::ostream& os, const tcp_hdr_t& hdr);
 std::ostream& operator<<(std::ostream& os, const tcp_seg_t& seg);

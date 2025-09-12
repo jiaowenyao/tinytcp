@@ -44,6 +44,16 @@ net_err_t tcp_syn_sent_in(TCPSock* tcp, tcp_seg_t* seg) {
         if (tcp_hdr->f_ack) {
             tcp_ack_process(tcp, seg);
         }
+
+        if (tcp_hdr->f_ack) {
+            tcp_send_ack(tcp, seg);
+            tcp->set_state(TCP_STATE_ESTABLISHED);
+            tcp->wakeup(SOCK_WAIT_CONN, net_err_t::NET_ERR_OK);
+        }
+        else { // 处理可能出现的同时发起请求，4次握手
+            tcp->set_state(TCP_STATE_SYN_RECVD);
+            tcp->tcp_send_syn();
+        }
     }
 
     return net_err_t::NET_ERR_OK;
@@ -55,16 +65,90 @@ net_err_t tcp_syn_recvd_in(TCPSock* tcp, tcp_seg_t* seg) {
 }
 
 net_err_t tcp_established_in(TCPSock* tcp, tcp_seg_t* seg) {
+    INIT_TCP_HDR;
 
+    if (tcp_hdr->f_rst) {
+        TINYTCP_LOG_WARN(g_logger) << "recv a rst";
+        return tcp_abort(tcp, net_err_t::NET_ERR_RESET);
+    }
+
+    if (tcp_hdr->f_syn) {
+        TINYTCP_LOG_WARN(g_logger) << "recv a syn";
+        tcp_send_reset(*seg);
+        return tcp_abort(tcp, net_err_t::NET_ERR_RESET);
+    }
+
+    net_err_t err = tcp_ack_process(tcp, seg);
+    if ((int8_t)err < 0) {
+        TINYTCP_LOG_WARN(g_logger) << "ack process failed";
+        return net_err_t::NET_ERR_UNREACH;
+    }
+
+    tcp_data_in(tcp, seg);
+
+    if (tcp_hdr->f_fin) {
+        tcp->set_state(TCP_STATE_CLOSE_WAIT);
+    }
     return net_err_t::NET_ERR_OK;
 }
 
 net_err_t tcp_fin_wait_1_in(TCPSock* tcp, tcp_seg_t* seg) {
+    INIT_TCP_HDR;
+
+    if (tcp_hdr->f_rst) {
+        TINYTCP_LOG_WARN(g_logger) << "recv a rst";
+        return tcp_abort(tcp, net_err_t::NET_ERR_RESET);
+    }
+
+    if (tcp_hdr->f_syn) {
+        TINYTCP_LOG_WARN(g_logger) << "recv a syn";
+        tcp_send_reset(*seg);
+        return tcp_abort(tcp, net_err_t::NET_ERR_RESET);
+    }
+
+    net_err_t err = tcp_ack_process(tcp, seg);
+    if ((int8_t)err < 0) {
+        TINYTCP_LOG_WARN(g_logger) << "ack process failed";
+        return net_err_t::NET_ERR_UNREACH;
+    }
+
+    tcp_data_in(tcp, seg);
+
+    if (tcp_hdr->f_fin) {
+        tcp_time_wait(tcp, seg);
+    }
+    else {
+        tcp->set_state(TCP_STATE_FIN_WAIT_2);
+    }
 
     return net_err_t::NET_ERR_OK;
 }
 
 net_err_t tcp_fin_wait_2_in(TCPSock* tcp, tcp_seg_t* seg) {
+    INIT_TCP_HDR;
+
+    if (tcp_hdr->f_rst) {
+        TINYTCP_LOG_WARN(g_logger) << "recv a rst";
+        return tcp_abort(tcp, net_err_t::NET_ERR_RESET);
+    }
+
+    if (tcp_hdr->f_syn) {
+        TINYTCP_LOG_WARN(g_logger) << "recv a syn";
+        tcp_send_reset(*seg);
+        return tcp_abort(tcp, net_err_t::NET_ERR_RESET);
+    }
+
+    net_err_t err = tcp_ack_process(tcp, seg);
+    if ((int8_t)err < 0) {
+        TINYTCP_LOG_WARN(g_logger) << "ack process failed";
+        return net_err_t::NET_ERR_UNREACH;
+    }
+
+    tcp_data_in(tcp, seg);
+
+    if (tcp_hdr->f_fin) {
+        tcp_time_wait(tcp, seg);
+    }
 
     return net_err_t::NET_ERR_OK;
 }
@@ -85,8 +169,27 @@ net_err_t tcp_close_wait_in(TCPSock* tcp, tcp_seg_t* seg) {
 }
 
 net_err_t tcp_last_ack_in(TCPSock* tcp, tcp_seg_t* seg) {
+    INIT_TCP_HDR;
 
-    return net_err_t::NET_ERR_OK;
+    if (tcp_hdr->f_rst) {
+        TINYTCP_LOG_WARN(g_logger) << "recv a rst";
+        return tcp_abort(tcp, net_err_t::NET_ERR_RESET);
+    }
+
+    if (tcp_hdr->f_syn) {
+        TINYTCP_LOG_WARN(g_logger) << "recv a syn";
+        tcp_send_reset(*seg);
+        return tcp_abort(tcp, net_err_t::NET_ERR_RESET);
+    }
+
+    net_err_t err = tcp_ack_process(tcp, seg);
+    if ((int8_t)err < 0) {
+        TINYTCP_LOG_WARN(g_logger) << "ack process failed";
+        return net_err_t::NET_ERR_UNREACH;
+    }
+
+
+    return tcp_abort(tcp, net_err_t::NET_ERR_CLOSE);
 }
 
 

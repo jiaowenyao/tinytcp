@@ -22,6 +22,7 @@ enum class net_err_t : int8_t {
     NET_ERR_BROKEN,
     NET_ERR_BINDED,       // 已经绑定了端口
     NET_ERR_RESET,
+    NET_ERR_CLOSE,
     ////
     NET_ERR_OK = 0,
     NET_ERR_NEED_WAIT = 1,

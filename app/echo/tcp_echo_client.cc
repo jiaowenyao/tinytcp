@@ -88,10 +88,10 @@ int main() {
     tinytcp::Config::load_from_yaml(root);
 
 
-    uint8_t hwaddr[6] = {0x00, 0x15, 0x5d, 0xc6, 0x5d, 0xc0};
+    uint8_t hwaddr[6] = {0x00, 0x15, 0x5d, 0xc6, 0x5e, 0xad};
     tinytcp::ipaddr_t _ip;
     tinytcp::pcap_data_t pcap_data {
-        .ip = "192.168.166.24",
+        .ip = "192.168.173.111",
         .hwaddr = hwaddr,
         .netmask = "255.255.240.0",
         .gateway = "192.168.160.1"

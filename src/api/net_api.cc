@@ -72,6 +72,10 @@ int close(int sock) {
     if (req.wait) {
         req.wait->wait_enter(req.wait_timeout);
     }
+
+    // 等待结束后再进行socket_free
+    p->exmsg_func_exec(std::bind(socket_free_req_in, &req));
+
     return 0;
 }
 
