@@ -279,7 +279,8 @@ net_err_t tcp_in(PktBuffer::ptr buf, const ipaddr_t& src_ip, const ipaddr_t& des
     TCPSock* tcp = tcp_find(dest_ip, dport, src_ip, sport);
     if (!tcp) {
         TINYTCP_LOG_INFO(g_logger) << "no tcp found";
-        tcp_send_reset(seg);
+        // tcp_send_reset(seg);
+        tcp_closed_in(nullptr, &seg);
         return net_err_t::NET_ERR_OK;
     }
 

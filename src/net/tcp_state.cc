@@ -12,7 +12,9 @@ static Logger::ptr g_logger = TINYTCP_LOG_NAME("system");
     magic_enum::enum_name((e))
 
 net_err_t tcp_closed_in(TCPSock* tcp, tcp_seg_t* seg) {
-
+    if (!seg->hdr->f_rst) {
+        tcp_send_reset(*seg);
+    }
     return net_err_t::NET_ERR_OK;
 }
 
