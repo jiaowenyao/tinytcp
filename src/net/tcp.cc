@@ -370,6 +370,11 @@ net_err_t tcp_ack_process(TCPSock* tcp, tcp_seg_t* seg) {
         tcp->flags.syn_out = 0;
     }
 
+    // 如果发过来的ack大于我的un ack，则说明对端已经收到了我的fin, 清空标志位，给后续处理
+    if (tcp->flags.fin_out && tcp_hdr->ack > tcp->m_send.una) {
+        tcp->flags.fin_out = 0;
+    }
+
     return net_err_t::NET_ERR_OK;
 }
 
