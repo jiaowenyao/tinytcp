@@ -59,7 +59,7 @@ net_err_t RAWSock::sendto(const void* buf, size_t len, int flags,
     return net_err_t::NET_ERR_OK;
 }
 
-net_err_t RAWSock::recvfrom(const void* buf, size_t len, int flags,
+net_err_t RAWSock::recvfrom(void* buf, size_t len, int flags,
                             struct sockaddr* src, socklen_t src_len,
                             ssize_t* result_len) {
     PktBuffer::ptr pktbuf = pop_buf();

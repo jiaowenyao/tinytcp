@@ -148,10 +148,50 @@ net_err_t TCPSock::send(const void* buf, size_t len, int flags, ssize_t* result_
     return net_err_t::NET_ERR_OK;
 }
 
-net_err_t TCPSock::recvfrom(const void* buf, size_t len, int flags,
+net_err_t TCPSock::recvfrom(void* buf, size_t len, int flags,
                             struct sockaddr* src, socklen_t src_len,
                             ssize_t* result_len) {
 
+    return net_err_t::NET_ERR_OK;
+}
+
+net_err_t TCPSock::recv(void* buf, size_t len, int flags, ssize_t* result_len) {
+    bool need_wait = true;
+    switch (m_state) {
+        case TCP_STATE_LAST_ACK:
+        case TCP_STATE_CLOSED: {
+            TINYTCP_LOG_ERROR(g_logger) << "tcp closed";
+            return net_err_t::NET_ERR_CLOSE;
+        }
+        case TCP_STATE_CLOSE_WAIT:
+        case TCP_STATE_CLOSING: {
+            need_wait = false;
+            break;
+        }
+        case TCP_STATE_FIN_WAIT_1:
+        case TCP_STATE_FIN_WAIT_2:
+        case TCP_STATE_ESTABLISHED: {
+            break;
+        }
+        case TCP_STATE_LISTEN:
+        case TCP_STATE_SYN_SENT:
+        case TCP_STATE_SYN_RECVD:
+        case TCP_STATE_TIME_WAIT:
+        default: {
+            TINYTCP_LOG_ERROR(g_logger) << "tcp state error";
+            return net_err_t::NET_ERR_STATE;
+        }
+    }
+
+    *result_len = 0;
+    int cnt = m_recv.buf.tcp_buf_read_recv((char*)buf, len);
+    if (cnt > 0) {
+        *result_len = cnt;
+        return net_err_t::NET_ERR_OK;
+    }
+    if (need_wait) {
+        return net_err_t::NET_ERR_NEED_WAIT;
+    }
     return net_err_t::NET_ERR_OK;
 }
 
@@ -326,6 +366,30 @@ static TCPSock* tcp_find(const ipaddr_t& local_ip, uint16_t local_port, const ip
     return nullptr;
 }
 
+bool TCPSock::tcp_seq_acceptable(tcp_seg_t* seg) {
+    uint32_t recv_win = get_tcp_recv_window();
+    if (seg->seq_len == 0) {
+        if (recv_win == 0) {
+            return seg->seq == m_recv.nxt;
+        }
+        else {
+            bool v = TCP_SEQ_LE(m_recv.nxt, seg->seq) && TCP_SEQ_LT(seg->seq, m_recv.nxt + recv_win);
+            return v;
+        }
+    }
+    else {
+        if (recv_win == 0) {
+            return false;
+        }
+        else {
+            bool v = TCP_SEQ_LE(m_recv.nxt, seg->seq) && TCP_SEQ_LT(seg->seq, m_recv.nxt + recv_win);
+            uint32_t slast = seg->seq + seg->seq_len - 1;
+            v |= (TCP_SEQ_LE(m_recv.nxt, slast) && TCP_SEQ_LT(slast, m_recv.nxt + recv_win));
+            return v;
+        }
+    }
+    return false;
+}
 
 net_err_t tcp_in(PktBuffer::ptr buf, const ipaddr_t& src_ip, const ipaddr_t& dest_ip) {
     const static std::unordered_map<tcp_state_t, tcp_proc_ptr> s_tcp_state_proc = {
@@ -343,6 +407,8 @@ net_err_t tcp_in(PktBuffer::ptr buf, const ipaddr_t& src_ip, const ipaddr_t& des
     };
 
     buf->reset_access();
+    net_err_t err = buf->set_cont_header(sizeof(tcp_hdr_t));
+    CHECK_NET_ERROR(err, "set_cont_header error");
     tcp_hdr_t* tcp_hdr = (tcp_hdr_t*)buf->get_data();
     if (tcp_hdr->checksum) {
         if (checksum_peso(buf, dest_ip, src_ip, NET_PROTOCOL_TCP) != 0) {
@@ -381,8 +447,20 @@ net_err_t tcp_in(PktBuffer::ptr buf, const ipaddr_t& src_ip, const ipaddr_t& des
         return net_err_t::NET_ERR_OK;
     }
 
+    if ((tcp->m_state != TCP_STATE_CLOSED)
+        && (tcp->m_state != TCP_STATE_SYN_SENT)
+        && (tcp->m_state != TCP_STATE_LISTEN)) {
+        if (!tcp->tcp_seq_acceptable(&seg)) {
+            TINYTCP_LOG_ERROR(g_logger) << "seq error";
+            return net_err_t::NET_ERR_OK;
+        }
+    }
+
     auto it = s_tcp_state_proc.find(tcp->get_state());
     if (it != s_tcp_state_proc.end()) {
+        buf->reset_access();
+        net_err_t err = buf->seek(tcp_hdr->get_header_size());
+        CHECK_NET_ERROR(err, "seek failed");
         it->second(tcp, &seg);
     }
     else {
@@ -447,6 +525,27 @@ int TCPSock::copy_send_data(PktBuffer::ptr pktbuf, int data_offset, int data_len
     return data_len;
 }
 
+void TCPSock::write_sync_option(PktBuffer::ptr buf) {
+    int opt_len = sizeof(tcp_opt_mss_t);
+    net_err_t err = buf->resize(buf->get_capacity() + opt_len);
+    if ((int8_t)err < 0) {
+        TINYTCP_LOG_ERROR(g_logger) << "resize error";
+        return;
+    }
+    tcp_opt_mss_t mss;
+    mss.kind = TCP_OPT_MSS;
+    mss.length = sizeof(tcp_opt_mss_t);
+    mss.mss = net_to_host((uint16_t)m_mss);
+
+    buf->reset_access();
+    buf->seek(sizeof(tcp_hdr_t));
+    err = buf->write((uint8_t*)&mss, sizeof(mss));
+    if ((int8_t)err < 0) {
+        TINYTCP_LOG_ERROR(g_logger) << "write error";
+        return;
+    }
+}
+
 net_err_t TCPSock::transmit() {
     int data_offset = 0;
     int data_len = 0;
@@ -488,9 +587,12 @@ net_err_t TCPSock::transmit() {
     if (m_send.buf.get_size() == 0) {
         hdr->f_fin = flags.fin_out;
     }
-    hdr->win = host_to_net((uint16_t)1024);
+    hdr->win = host_to_net(get_tcp_recv_window());
     hdr->urgptr = 0;
-    hdr->set_header_size(sizeof(tcp_hdr_t));
+    if (hdr->f_syn) {
+        write_sync_option(pktbuf);
+    }
+    hdr->set_header_size(pktbuf->get_capacity());
 
     copy_send_data(pktbuf, data_offset, data_len);
 
@@ -508,6 +610,14 @@ net_err_t tcp_abort(TCPSock* tcp, net_err_t err) {
 
 net_err_t tcp_ack_process(TCPSock* tcp, tcp_seg_t* seg) {
     INIT_TCP_HDR;
+
+    // m_send.una < ack <= m_send.nxt
+    if (TCP_SEQ_LE(ack, tcp->m_send.una)) {
+        return net_err_t::NET_ERR_OK;
+    }
+    else if (TCP_SEQ_LT(tcp->m_send.nxt, ack)) {
+        return net_err_t::NET_ERR_UNREACH;
+    }
 
     // 响应报文的处理，una(未响应地址)+1
     if (tcp->flags.syn_out) {
@@ -548,25 +658,45 @@ net_err_t tcp_send_ack(TCPSock* tcp, tcp_seg_t* seg) {
     hdr->flag = 0;
     hdr->f_syn = 0;
     hdr->f_ack = 1;
-    hdr->win = host_to_net((uint16_t)1024);
+    hdr->win = host_to_net(tcp->get_tcp_recv_window());
     hdr->urgptr = 0;
     hdr->set_header_size(sizeof(tcp_hdr_t));
 
     return hdr->send_out(pktbuf, tcp->get_remote_ip(), tcp->get_local_ip());
 }
 
+int TCPSock::copy_data_to_recvbuf(tcp_seg_t* seg) {
+    int data_offset = seg->seq - m_recv.nxt;
+    if (seg->data_len && data_offset == 0) {
+        return m_recv.buf.tcp_buf_write_recv(seg->buf, data_offset, seg->data_len);
+    }
+    return 0;
+}
+
 net_err_t tcp_data_in(TCPSock* tcp, tcp_seg_t* seg) {
     INIT_TCP_HDR;
 
-    int wakeup = 0;
+    int size = tcp->copy_data_to_recvbuf(seg);
+    if (size < 0) {
+        TINYTCP_LOG_ERROR(g_logger) << "copy data to recv buf error";
+        return net_err_t::NET_ERR_SIZE;
+    }
 
-    if (tcp_hdr->f_fin) {
+    int wakeup = 0;
+    if (size > 0) {
+        tcp->m_recv.nxt += size;
+        ++wakeup;
+    }
+
+    // fin为1，并且通过seq和nxt判断数据确实已经接收完成
+    if (tcp_hdr->f_fin && (tcp->m_recv.nxt == seg->seq)) {
+        tcp->flags.fin_in = 1;
         tcp->m_recv.nxt++;
         ++wakeup;
     }
 
     if (wakeup) {
-        if (tcp_hdr->f_fin) {
+        if (tcp->flags.fin_in) {
             tcp->wakeup(SOCK_WAIT_ALL, net_err_t::NET_ERR_CLOSE);
         }
         else {
@@ -581,6 +711,11 @@ net_err_t tcp_data_in(TCPSock* tcp, tcp_seg_t* seg) {
 net_err_t tcp_time_wait(TCPSock* tcp, tcp_seg_t* seg) {
     tcp->set_state(TCP_STATE_TIME_WAIT);
     return net_err_t::NET_ERR_OK;
+}
+
+uint16_t TCPSock::get_tcp_recv_window() {
+    uint16_t window = m_recv.buf.get_free_size();
+    return window;
 }
 
 std::ostream& operator<<(std::ostream& os, const tcp_hdr_t& hdr) {

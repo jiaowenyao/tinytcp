@@ -17,6 +17,8 @@ public:
     void tcp_buf_write_send(const char* buffer, uint32_t len);
     void tcp_buf_read_send(PktBuffer::ptr pktbuf, int data_offset, int data_len);
     int tcp_buf_remove(int cnt);
+    int tcp_buf_write_recv(PktBuffer::ptr pktbuf, int data_offset, int total);
+    int tcp_buf_read_recv(char* buf, int data_len);
 
 private:
     uint8_t* m_data;

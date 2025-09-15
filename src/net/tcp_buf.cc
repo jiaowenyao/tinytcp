@@ -84,5 +84,56 @@ int TCPBuffer::tcp_buf_remove(int cnt) {
     return cnt;
 }
 
+int TCPBuffer::tcp_buf_write_recv(PktBuffer::ptr pktbuf, int data_offset, int total) {
+    int start = m_in + data_offset;
+    if (start >= m_capacity) {
+        start = start - m_capacity;
+    }
+
+    // 计算实际可写的数据量
+    int free_size = get_free_size() - data_offset;
+    total = (total > free_size) ? free_size : total;
+
+    int size = total;
+    while (size > 0) {
+        // 从start到缓存末端的单元数量，可能其中有数据也可能没有
+        int free_to_end = m_capacity - start;
+
+        // 大小超过到尾部的空闲数据量，只拷贝一部分
+        int curr_copy = size > free_to_end ? free_to_end : size;
+        pktbuf->read(m_data + start, curr_copy);
+
+        start += curr_copy;
+        if (start >= m_capacity) {
+            start = start - m_capacity;
+        }
+
+        // 增加已写入的数据量
+        m_size += curr_copy;
+        size -= curr_copy;
+    }
+
+    m_in = start;
+    return total;
+}
+
+int TCPBuffer::tcp_buf_read_recv(char* buf, int data_len) {
+    int total = std::min(m_size, data_len);
+
+    int curr_size = 0;
+    while (curr_size < total) {
+        *buf++ = m_data[m_out++];
+        if (m_out >= m_capacity) {
+            m_out = 0;
+        }
+        --m_size;
+        ++curr_size;
+    }
+    return total;
+}
+
+
+
+
 } // namespace tinytcp
 

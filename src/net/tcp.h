@@ -77,7 +77,7 @@ struct tcp_seg_t {
         , hdr((tcp_hdr_t*)_buf->get_data())
         , buf(_buf) {
         data_len = buf->get_capacity() - hdr->get_header_size();
-        seq = hdr->seq;
+        seq = net_to_host(hdr->seq);
         seq_len = data_len + hdr->f_syn + hdr->f_fin;
     }
 };
@@ -119,9 +119,10 @@ public:
                              const struct sockaddr* dest, socklen_t dest_len,
                              ssize_t* result_len) override;
     net_err_t send(const void* buf, size_t len, int flags, ssize_t* result_len) override;
-    net_err_t recvfrom(const void* buf, size_t len, int flags,
+    net_err_t recvfrom(void* buf, size_t len, int flags,
                              struct sockaddr* src, socklen_t src_len,
                              ssize_t* result_len) override;
+    net_err_t recv(void* buf, size_t len, int flags, ssize_t* result_len) override;
     net_err_t connect(sockaddr* addr, socklen_t addr_len) override;
     net_err_t close() override;
     net_err_t free();
@@ -139,6 +140,10 @@ public:
     int tcp_write_send_buf(const char* buf, int len);
     void get_send_info(int& data_offset, int& data_len);
     int copy_send_data(PktBuffer::ptr pktbuf, int data_offset, int data_len);
+    int copy_data_to_recvbuf(tcp_seg_t* seg);
+    void write_sync_option(PktBuffer::ptr buf);
+    uint16_t get_tcp_recv_window();
+    bool tcp_seq_acceptable(tcp_seg_t* seg);
 
 public:
     tcp_state_t m_state;
@@ -152,6 +157,7 @@ public:
     } m_send;
 
     struct {
+        TCPBuffer buf;
         uint32_t nxt; // 下一个期望接收的数据
         uint32_t iss; // 初始序号
         sock_wait_t wait;
@@ -159,6 +165,7 @@ public:
 
     struct {
         uint32_t syn_out   : 1; // 为1的话,syn已经发送
+        uint32_t fin_in    : 1; // 接收是否真的处于完毕的状态
         uint32_t fin_out   : 1; // 要发送fin标志位
         uint32_t irs_valid : 1; // 收到了对端的syn
     } flags;
@@ -176,6 +183,9 @@ net_err_t tcp_time_wait(TCPSock* tcp, tcp_seg_t* seg);
 std::ostream& operator<<(std::ostream& os, const tcp_hdr_t& hdr);
 std::ostream& operator<<(std::ostream& os, const tcp_seg_t& seg);
 
+// a <= b
+#define TCP_SEQ_LE(a, b)    (((int32_t)(a) - (int32_t)(b)) <= 0)
+#define TCP_SEQ_LT(a, b)    (((int32_t)(a) - (int32_t)(b)) < 0)
 
 
 

@@ -95,7 +95,7 @@ net_err_t tcp_established_in(TCPSock* tcp, tcp_seg_t* seg) {
     // 收到数据后，看有没有数据需要传输
     tcp->transmit();
 
-    if (tcp_hdr->f_fin) {
+    if (tcp->flags.fin_in) {
         tcp->set_state(TCP_STATE_CLOSE_WAIT);
     }
     return net_err_t::NET_ERR_OK;
@@ -126,14 +126,14 @@ net_err_t tcp_fin_wait_1_in(TCPSock* tcp, tcp_seg_t* seg) {
     tcp->transmit();
 
     if (tcp->flags.fin_out == 0) {
-        if (tcp_hdr->f_fin) {
+        if (tcp->flags.fin_in) {
             tcp_time_wait(tcp, seg);
         }
         else {
             tcp->set_state(TCP_STATE_FIN_WAIT_2);
         }
     }
-    else if (tcp_hdr->f_fin) { // 否则就是触发了两端同时发送关闭请求的过程，进入CLOSING状态
+    else if (tcp->flags.fin_in) { // 否则就是触发了两端同时发送关闭请求的过程，进入CLOSING状态
         tcp->set_state(TCP_STATE_CLOSING);
     }
 
@@ -162,7 +162,7 @@ net_err_t tcp_fin_wait_2_in(TCPSock* tcp, tcp_seg_t* seg) {
 
     tcp_data_in(tcp, seg);
 
-    if (tcp_hdr->f_fin) {
+    if (tcp->flags.fin_in) {
         tcp_time_wait(tcp, seg);
     }
 
@@ -218,7 +218,7 @@ net_err_t tcp_time_wait_in(TCPSock* tcp, tcp_seg_t* seg) {
         return net_err_t::NET_ERR_UNREACH;
     }
 
-    if (tcp_hdr->f_fin) {
+    if (tcp->flags.fin_in) {
         tcp_send_ack(tcp, seg);
         tcp_time_wait(tcp, seg);
     }

@@ -224,7 +224,7 @@ net_err_t Sock::send(const void* buf, size_t len, int flags, ssize_t* result_len
     return sendto(buf, len, flags, (const struct sockaddr*)&dest, sizeof(dest), result_len);
 }
 
-net_err_t Sock::recv(const void* buf, size_t len, int flags, ssize_t* result_len) {
+net_err_t Sock::recv(void* buf, size_t len, int flags, ssize_t* result_len) {
     sockaddr src;
     socklen_t addr_len;
     return recvfrom(buf, len, flags, &src, addr_len, result_len);

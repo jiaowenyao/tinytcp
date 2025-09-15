@@ -131,10 +131,10 @@ public:
                              ssize_t* result_len) = 0;
     virtual net_err_t send(const void* buf, size_t len, int flags, ssize_t* result_len);
 
-    virtual net_err_t recvfrom(const void* buf, size_t len, int flags,
+    virtual net_err_t recvfrom(void* buf, size_t len, int flags,
                              struct sockaddr* src, socklen_t src_len,
                              ssize_t* result_len) = 0;
-    virtual net_err_t recv(const void* buf, size_t len, int flags, ssize_t* result_len);
+    virtual net_err_t recv(void* buf, size_t len, int flags, ssize_t* result_len);
     virtual net_err_t setopt(int level, int optname,
                              const char* optval, int optlen);
     virtual net_err_t connect(sockaddr* addr, socklen_t addr_len);

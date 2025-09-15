@@ -220,6 +220,10 @@ ssize_t recvfrom(int sockfd, void *buf, size_t len, int flags,
         }
 
         err = req.wait->wait_enter(req.wait_timeout);
+        if (err == net_err_t::NET_ERR_CLOSE) {
+            TINYTCP_LOG_INFO(g_logger) << "remote close";
+            return 0;
+        }
         if ((int8_t)err < 0) {
             TINYTCP_LOG_ERROR(g_logger) << "recv failed";
             return -1;
@@ -257,7 +261,11 @@ ssize_t recv(int sockfd, void *buf, size_t len, int flags) {
         }
 
         err = req.wait->wait_enter(req.wait_timeout);
-        if ((int8_t)err < 0) {
+        if (err == net_err_t::NET_ERR_CLOSE) {
+            TINYTCP_LOG_INFO(g_logger) << "remote close";
+            return 0;
+        }
+        else if ((int8_t)err < 0) {
             TINYTCP_LOG_ERROR(g_logger) << "recv failed";
             return -1;
         }
