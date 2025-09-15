@@ -43,6 +43,10 @@ net_err_t tcp_syn_sent_in(TCPSock* tcp, tcp_seg_t* seg) {
         tcp->m_recv.iss = seq;
         tcp->m_recv.nxt = seq + 1;
         tcp->flags.irs_valid = 1;
+
+        // 建立连接时处理对端发送过来的连接选项
+        tcp->tcp_read_option(tcp_hdr);
+
         if (tcp_hdr->f_ack) {
             tcp_ack_process(tcp, seg);
         }
@@ -88,6 +92,9 @@ net_err_t tcp_established_in(TCPSock* tcp, tcp_seg_t* seg) {
 
     tcp_data_in(tcp, seg);
 
+    // 收到数据后，看有没有数据需要传输
+    tcp->transmit();
+
     if (tcp_hdr->f_fin) {
         tcp->set_state(TCP_STATE_CLOSE_WAIT);
     }
@@ -116,6 +123,8 @@ net_err_t tcp_fin_wait_1_in(TCPSock* tcp, tcp_seg_t* seg) {
 
     tcp_data_in(tcp, seg);
 
+    tcp->transmit();
+
     if (tcp->flags.fin_out == 0) {
         if (tcp_hdr->f_fin) {
             tcp_time_wait(tcp, seg);
@@ -124,7 +133,7 @@ net_err_t tcp_fin_wait_1_in(TCPSock* tcp, tcp_seg_t* seg) {
             tcp->set_state(TCP_STATE_FIN_WAIT_2);
         }
     }
-    else { // 否则就是触发了两端同时发送关闭请求的过程，进入CLOSING状态
+    else if (tcp_hdr->f_fin) { // 否则就是触发了两端同时发送关闭请求的过程，进入CLOSING状态
         tcp->set_state(TCP_STATE_CLOSING);
     }
 
@@ -179,6 +188,8 @@ net_err_t tcp_closing_in(TCPSock* tcp, tcp_seg_t* seg) {
         TINYTCP_LOG_WARN(g_logger) << "ack process failed";
         return net_err_t::NET_ERR_UNREACH;
     }
+
+    tcp->transmit();
 
     if (tcp->flags.fin_out == 0) {
         tcp_time_wait(tcp, seg);
@@ -236,6 +247,8 @@ net_err_t tcp_close_wait_in(TCPSock* tcp, tcp_seg_t* seg) {
         return net_err_t::NET_ERR_UNREACH;
     }
 
+    tcp->transmit();
+
     return net_err_t::NET_ERR_OK;
 }
 
@@ -259,8 +272,14 @@ net_err_t tcp_last_ack_in(TCPSock* tcp, tcp_seg_t* seg) {
         return net_err_t::NET_ERR_UNREACH;
     }
 
+    tcp->transmit();
 
-    return tcp_abort(tcp, net_err_t::NET_ERR_CLOSE);
+    // 收到对端的回应后才调用tcp_abort关闭连接
+    if (tcp->flags.fin_out == 0) {
+        return tcp_abort(tcp, net_err_t::NET_ERR_CLOSE);
+    }
+
+    return net_err_t::NET_ERR_OK;
 }
 
 

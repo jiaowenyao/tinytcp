@@ -63,6 +63,17 @@ TCPSock::TCPSock(int family, int protocol)
     m_conn_wait = new sock_wait_t;
     m_send_wait = new sock_wait_t;
     m_state = TCP_STATE_CLOSED;
+
+    route_entry_t* rt = ProtocolStackMgr::get_instance()->get_ipprotocol()->route_find(m_remote_ip);
+    if (rt->netif->get_mtu()) {
+        m_mss = TCP_DEFAULT_MSS;
+    }
+    else if(!(rt->next_hop == ipaddr_t(0U))) {
+        m_mss = TCP_DEFAULT_MSS;
+    }
+    else {
+        m_mss = rt->netif->get_mtu() - sizeof(ipv4_hdr_t) - sizeof(tcp_hdr_t);
+    }
 }
 
 TCPSock::~TCPSock() {
@@ -82,6 +93,57 @@ void TCPSock::init() {
 net_err_t TCPSock::sendto(const void* buf, size_t len, int flags,
                             const struct sockaddr* dest, socklen_t dest_len,
                             ssize_t* result_len) {
+
+    return net_err_t::NET_ERR_OK;
+}
+
+int TCPSock::tcp_write_send_buf(const char* buf, int len) {
+    int free_cnt = m_send.buf.get_free_size();
+    if (free_cnt <= 0) {
+        return 0;
+    }
+
+    int write_len = std::min(len, free_cnt);
+    m_send.buf.tcp_buf_write_send(buf, write_len);
+    return write_len;
+}
+
+net_err_t TCPSock::send(const void* buf, size_t len, int flags, ssize_t* result_len) {
+    switch ((int)m_state) {
+        case TCP_STATE_CLOSED: {
+            TINYTCP_LOG_ERROR(g_logger) << "tcp closed.";
+            return net_err_t::NET_ERR_CLOSE;
+        }
+        case TCP_STATE_FIN_WAIT_1:
+        case TCP_STATE_FIN_WAIT_2:
+        case TCP_STATE_TIME_WAIT:
+        case TCP_STATE_LAST_ACK:
+        case TCP_STATE_CLOSING: {
+            TINYTCP_LOG_ERROR(g_logger) << "tcp closed.";
+            return net_err_t::NET_ERR_CLOSE;
+        }
+        case TCP_STATE_CLOSE_WAIT:
+        case TCP_STATE_ESTABLISHED: {
+            break;
+        }
+        case TCP_STATE_LISTEN:
+        case TCP_STATE_SYN_RECVD:
+        case TCP_STATE_SYN_SENT:
+        default: {
+            TINYTCP_LOG_ERROR(g_logger) << "tcp state error.";
+            return net_err_t::NET_ERR_STATE;
+        }
+    }
+
+    int size = tcp_write_send_buf((const char*)buf, len);
+    if (size <= 0) {
+        *result_len = 0;
+        return net_err_t::NET_ERR_NEED_WAIT;
+    }
+    else {
+        *result_len = size;
+        transmit();
+    }
 
     return net_err_t::NET_ERR_OK;
 }
@@ -117,6 +179,41 @@ net_err_t TCPSock::tcp_send_fin() {
     flags.fin_out = 1;
     transmit();
     return net_err_t::NET_ERR_OK;
+}
+
+void TCPSock::tcp_read_option(tcp_hdr_t* hdr) {
+    uint8_t* opt_start = (uint8_t*)hdr + sizeof(tcp_hdr_t);
+    uint8_t* opt_end = opt_start + hdr->get_header_size() - sizeof(tcp_hdr_t);
+    if (opt_end <= opt_start) {
+        return;
+    }
+
+    while (opt_start < opt_end) {
+        switch (opt_start[0]) {
+            case TCP_OPT_MSS: {
+                tcp_opt_mss_t* opt = (tcp_opt_mss_t*)opt_start;
+                if (opt->length == 4) {
+                    uint16_t mss = net_to_host(opt->mss);
+                    if (mss < m_mss) {
+                        m_mss = mss;
+                    }
+                }
+                opt_start += opt->length;
+                break;
+            }
+            case TCP_OPT_NOP: {
+                ++opt_start;
+                break;
+            }
+            case TCP_OPT_END: {
+                return;
+            }
+            default: {
+                ++opt_start;
+                break;
+            }
+        }
+    }
 }
 
 net_err_t TCPSock::connect(sockaddr* addr, socklen_t addr_len) {
@@ -326,7 +423,49 @@ net_err_t tcp_send_reset(tcp_seg_t& seg) {
     return out->send_out(pktbuf, seg.remote_ip, seg.local_ip);
 }
 
+void TCPSock::get_send_info(int& data_offset, int& data_len) {
+    data_offset = m_send.nxt - m_send.una;
+    data_len = m_send.buf.get_size() - data_offset;
+    data_len = std::min(data_len, m_mss);
+}
+
+int TCPSock::copy_send_data(PktBuffer::ptr pktbuf, int data_offset, int data_len) {
+    if (data_len == 0) {
+        return 0;
+    }
+
+    net_err_t err = pktbuf->resize(pktbuf->get_capacity() + data_len);
+    if ((int8_t)err < 0) {
+        TINYTCP_LOG_ERROR(g_logger) << "copy_send_data resize error";
+        return -1;
+    }
+
+    uint32_t hdr_size = ((tcp_hdr_t*)pktbuf->get_data())->get_header_size();
+    pktbuf->reset_access();
+    pktbuf->seek(hdr_size);
+    m_send.buf.tcp_buf_read_send(pktbuf, data_offset, data_len);
+    return data_len;
+}
+
 net_err_t TCPSock::transmit() {
+    int data_offset = 0;
+    int data_len = 0;
+    get_send_info(data_offset, data_len);
+    if (data_len < 0) {
+        return net_err_t::NET_ERR_OK;
+    }
+
+    int seq_len = data_len;
+    if (flags.syn_out) {
+        ++seq_len;
+    }
+    if (flags.fin_out) {
+        ++seq_len;
+    }
+    if (seq_len == 0) {
+        return net_err_t::NET_ERR_OK;
+    }
+
     PktBuffer::ptr pktbuf = PktMgr::get_instance()->get_pktbuffer();
     if (!pktbuf) {
         TINYTCP_LOG_WARN(g_logger) << "transmit get buf error";
@@ -345,12 +484,17 @@ net_err_t TCPSock::transmit() {
     hdr->flag = 0;
     hdr->f_syn = flags.syn_out;
     hdr->f_ack = flags.irs_valid;
-    hdr->f_fin = flags.fin_out;
+    hdr->f_fin = 0;
+    if (m_send.buf.get_size() == 0) {
+        hdr->f_fin = flags.fin_out;
+    }
     hdr->win = host_to_net((uint16_t)1024);
     hdr->urgptr = 0;
     hdr->set_header_size(sizeof(tcp_hdr_t));
 
-    m_send.nxt += hdr->f_syn + hdr->f_fin;
+    copy_send_data(pktbuf, data_offset, data_len);
+
+    m_send.nxt += hdr->f_syn + hdr->f_fin + data_len;
 
 
     return hdr->send_out(pktbuf, m_remote_ip, m_local_ip);
@@ -371,9 +515,23 @@ net_err_t tcp_ack_process(TCPSock* tcp, tcp_seg_t* seg) {
         tcp->flags.syn_out = 0;
     }
 
-    // 如果发过来的ack大于我的un ack，则说明对端已经收到了我的fin, 清空标志位，给后续处理
-    if (tcp->flags.fin_out && tcp_hdr->ack > tcp->m_send.una) {
-        tcp->flags.fin_out = 0;
+    int acked_cnt = tcp_hdr->ack - tcp->m_send.una;
+    int unacked = tcp->m_send.nxt - tcp->m_send.una;
+    int curr_acked = std::min(acked_cnt, unacked);
+    if (curr_acked > 0) {
+        // 唤醒等待写入的线程
+        tcp->wakeup(SOCK_WAIT_WRITE, net_err_t::NET_ERR_OK);
+        // 未确认的指针往前移
+        tcp->m_send.una += curr_acked;
+        // 移除对端已经确认的数据
+        curr_acked -= tcp->m_send.buf.tcp_buf_remove(curr_acked);
+
+        // 如果发过来的ack大于我的un ack，则说明对端已经收到了我的fin, 清空标志位，给后续处理
+        // if (tcp->flags.fin_out && tcp_hdr->ack > tcp->m_send.una) {
+        // 如果curr_acked为1，说明对端接收到了fin
+        if (tcp->flags.fin_out && curr_acked) {
+            tcp->flags.fin_out = 0;
+        }
     }
 
     return net_err_t::NET_ERR_OK;

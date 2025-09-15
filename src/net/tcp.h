@@ -1,11 +1,17 @@
 #pragma once
 #include "sock.h"
+#include "tcp_buf.h"
 #include "src/endiantool.h"
 
 
 namespace tinytcp {
 
 #pragma pack(1)
+struct tcp_opt_mss_t {
+    uint8_t kind;
+    uint8_t length;
+    uint16_t mss;
+};
 struct tcp_hdr_t {
     uint16_t sport;
     uint16_t dport;
@@ -98,6 +104,10 @@ enum tcp_state_t {
     uint32_t ack = net_to_host(tcp_hdr->ack); \
     uint32_t seq = net_to_host(tcp_hdr->seq);
 
+#define TCP_DEFAULT_MSS         536
+#define TCP_OPT_END             0
+#define TCP_OPT_NOP             1
+#define TCP_OPT_MSS             2
 
 class TCPSock : public Sock {
 public:
@@ -108,6 +118,7 @@ public:
     net_err_t sendto(const void* buf, size_t len, int flags,
                              const struct sockaddr* dest, socklen_t dest_len,
                              ssize_t* result_len) override;
+    net_err_t send(const void* buf, size_t len, int flags, ssize_t* result_len) override;
     net_err_t recvfrom(const void* buf, size_t len, int flags,
                              struct sockaddr* src, socklen_t src_len,
                              ssize_t* result_len) override;
@@ -120,12 +131,20 @@ public:
     net_err_t tcp_init_connect();
     net_err_t tcp_send_syn();
     net_err_t tcp_send_fin();
+    void tcp_read_option(tcp_hdr_t* hdr);
 
     tcp_state_t get_state() const noexcept { return m_state; }
     void set_state(tcp_state_t state) noexcept { m_state = state; }
-    tcp_state_t m_state;
+
+    int tcp_write_send_buf(const char* buf, int len);
+    void get_send_info(int& data_offset, int& data_len);
+    int copy_send_data(PktBuffer::ptr pktbuf, int data_offset, int data_len);
+
 public:
+    tcp_state_t m_state;
+    int m_mss;
     struct {
+        TCPBuffer buf;
         uint32_t una; // 没有确认的数据
         uint32_t nxt; // 下一个需要发送的数据
         uint32_t iss; // 起始序列号
